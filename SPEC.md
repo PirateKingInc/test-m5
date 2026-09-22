@@ -133,11 +133,14 @@ border openings disagree with the declared exits.
 ```
         x=0               x=1               x=2               x=3
 y=0  ow_bellhill  ——  ow_northgate  —G—  ow_stormstair  ——  ow_aeriedoor
-                           |                                      |
+                           |
 y=1  ow_whorlgrove     ow_crossroads ——  ow_eastfen     ——  ow_cliffside
          |                 |                  |                   |
 y=2  ow_cinderhome ——  ow_southmire  ——  ow_mirevault   ——  ow_shore
 ```
+
+The Aerie Gate hangs off the Storm Stair and nothing else. That is deliberate:
+it is the only road to Dungeon 2, so the whorl pillar actually gates it.
 
 | room | contents |
 | --- | --- |
@@ -150,8 +153,8 @@ y=2  ow_cinderhome ——  ow_southmire  ——  ow_mirevault   ——  ow_shore
 | `ow_northgate` | **whorl pillar** — a charged spin opens the `G` gate east to the Storm Stair. Mothkins. |
 | `ow_bellhill` | sign, save point, hint NPC (Bell-Ringer Orrin), Spitfen. |
 | `ow_stormstair` | Thudders on narrow steps. |
-| `ow_aeriedoor` | **Dungeon 2 entrance** (`D` portal), sign, save point. |
-| `ow_cliffside` | **heart container** on a raised ledge (U2). |
+| `ow_aeriedoor` | **Dungeon 2 entrance** (`D` portal), sign, save point. The stair will not open until Wick-Stone I is lit, so the Sap-Warden cannot be skipped. |
+| `ow_cliffside` | **heart container** on a raised ledge (U2). A dead end off Eastfen. |
 | `ow_eastfen` | water, Spitfens, Brumbler. |
 
 ### 6.2 Dungeon 1 — The Mire Vaults (14 rooms)
@@ -205,6 +208,10 @@ y=2  d2_cloister ——  d2_bridge    ——   d2_organloft --L1-- d2_vestry
 y=3  d2_foyer    ——  d2_stairwell ——   d2_cellar
 ```
 
+The Vestry is a dead end behind `L1`. The East Spire has exactly two ways in
+and out: the 2-tile pit west of it, and `L3` north. Both need the Gale Sandals,
+which is what makes the East Spire key and the Aerie boss key sandals-gated.
+
 | room | contents |
 | --- | --- |
 | `d2_foyer` | save point, sign, portal down to `ow_aeriedoor`. |
@@ -213,7 +220,7 @@ y=3  d2_foyer    ——  d2_stairwell ——   d2_cellar
 | `d2_cloister` | **heart container**. Palebucklers. |
 | `d2_bridge` | 1-tile pits over the chasm, Mothkins. |
 | `d2_organloft` | **small key 2** (chest), Thudder. `L1` east. |
-| `d2_vestry` | **heart container**. |
+| `d2_vestry` | **heart container**. Dead end behind `L1`. |
 | `d2_updraft` | **U2 Gale Sandals** (big chest), Mothkins + Thudder. `L2` north. |
 | `d2_galehall` | 2-tile pits east (U2), raised ledge north (U2). |
 | `d2_eastspire` | **small key 3** beyond a 2-tile pit. `L3` north. |
@@ -229,6 +236,8 @@ zero keys spent.
 
 ### 6.4 Progression gates, in order
 
+0. The Aerie Gate's stair is shut until Wick-Stone I is lit, so the order below
+   is the only order.
 1. Cinderhome → mire → **Dungeon 1**.
 2. D1: keys 1 & 2 → open `L3` → the Keyroom route; **U1 Rootcarver Blade**.
 3. U1 breaks the Keyroom's cracked east wall → East Loop → key 3 → `L2` → boss key → `B` → **Boss 1**.
@@ -237,6 +246,10 @@ zero keys spent.
 6. D2: keys 1 & 2, then **U2 Gale Sandals** in the Updraft Hall.
 7. U2 crosses the 2-tile pits to the East Spire (key 3) and vaults the ledge to the High Ledge.
 8. `L3` → boss key; `L2` → the Chancel; `B` → **Boss 2** → ending + credits.
+
+`tools/verify-progression.js` proves each of U1, U2, U3 and the Sap-Warden is
+load-bearing by removing it and re-searching the whole game: with any one of
+them gone, the ending becomes unreachable.
 
 ### 6.5 Heart containers (7; Summer starts with 3 hearts, caps at 10)
 
