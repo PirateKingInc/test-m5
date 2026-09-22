@@ -40,11 +40,27 @@ export function makePlayer(tx, ty) {
     falling: 0,
     /** Which axis the player most recently asked for, so held diagonals resolve. */
     lastAxis: 'y',
+    /** True for every frame she spent off the ground, landing frame included. */
+    aloft: false,
+    /** Sword state. A press swings; A held long enough arms the whorl spin. */
+    swing: 0,
+    swingDir: 'down',
+    charge: 0,
+    spin: 0,
   };
 }
 
 export function isAirborne(p) {
   return p.air > 0;
+}
+
+/**
+ * Was she off the ground for the whole of the frame just simulated? This, not
+ * `isAirborne`, is what shockwaves, Mothkins and the sword's reach should ask,
+ * because it stays true across the landing frame.
+ */
+export function aloft(p) {
+  return p.aloft === true;
 }
 
 /** Visual lift in pixels, an arc across the airtime. Rendering only. */
@@ -139,7 +155,17 @@ export function stepPlayer(p, grid, input) {
 
   if (p.iframes > 0) p.iframes -= 1;
 
+  // A jump asked for this frame is airborne for the whole of this frame. The
+  // countdown does not reach zero until the end, so `p.aloft` - not the
+  // countdown - is what anything outside this function should read. Otherwise
+  // the landing frame reads as grounded and "jump the shockwave" becomes luck.
+  if (input.jump && !isAirborne(p) && p.knock === 0 && !input.frozen) {
+    p.air = airtimeFor(input.hasSandals);
+    p.airTotal = p.air;
+    out.jumped = true;
+  }
   const airborne = isAirborne(p);
+  p.aloft = airborne;
   const ctx = { airborne, hasSandals: input.hasSandals, onLedge: p.onLedge };
 
   // Knockback overrides steering entirely.
@@ -148,12 +174,6 @@ export function stepPlayer(p, grid, input) {
     slide(grid, p, p.knockX, 0, ctx);
     slide(grid, p, 0, p.knockY, ctx);
   } else if (!input.frozen) {
-    if (input.jump && !airborne) {
-      p.air = airtimeFor(input.hasSandals);
-      p.airTotal = p.air;
-      out.jumped = true;
-    }
-
     let { dx, dy } = input;
     // Strict four-direction movement: a held diagonal resolves to whichever
     // axis was asked for most recently.
@@ -169,20 +189,27 @@ export function stepPlayer(p, grid, input) {
     if (dx !== 0) p.dir = dx < 0 ? 'left' : 'right';
     else if (dy !== 0) p.dir = dy < 0 ? 'up' : 'down';
 
-    const speed = isAirborne(p) ? AIR_SPEED : WALK_SPEED;
+    const speed = airborne ? AIR_SPEED : WALK_SPEED;
     p.moving = dx !== 0 || dy !== 0;
     if (p.moving) p.anim += 1;
     slide(grid, p, dx * speed, 0, ctx);
     slide(grid, p, 0, dy * speed, ctx);
   }
 
+  // The tile she comes down on is checked on the frame she comes down, even
+  // though that frame still counts as airborne for damage. Deferring it would
+  // let a player who re-presses B on the landing frame hover across any pit.
+  let grounded = !airborne;
   if (p.air > 0) {
     p.air -= 1;
-    if (p.air === 0) out.landed = true;
+    if (p.air === 0) {
+      out.landed = true;
+      grounded = true;
+    }
   }
 
-  // Standing still on the ground: fall into a pit, or bank a safe spot.
-  if (!isAirborne(p)) {
+  // Touching down: fall into a pit, or bank a safe spot.
+  if (grounded) {
     const { tx, ty } = tileUnder(p);
     const ch = tileAt(grid, tx, ty);
     p.onLedge = isLedge(ch);

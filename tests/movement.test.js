@@ -114,6 +114,23 @@ test('the Gale Sandals clear two tiles but never three', () => {
   assert.equal(attemptPit(3, true).fell, true, 'a 3-tile pit must not be, even with sandals');
 });
 
+test('mashing B on the landing frame cannot hover her across a pit', () => {
+  // Regression: if the pit check waited for a frame that is not "airborne",
+  // a player re-pressing B the instant she touches down would never be
+  // standing on anything, and every pit in the game would be free.
+  const room = grid([
+    '##########', '#........#', '#........#', '#.PPPPPP.#',
+    '#.PPPPPP.#', '#........#', '#........#', '##########',
+  ]);
+  const p = makePlayer(1, 3);
+  let fell = false;
+  for (let i = 0; i < 400 && !fell; i += 1) {
+    fell = stepPlayer(p, room, hold({ dx: 1, jump: true })).fell;
+  }
+  assert.ok(fell, 'holding B every frame must not carry her over a six-tile pit');
+  assert.ok(tileUnder(p).tx <= 4, 'and she should not have got far');
+});
+
 test('falling into a pit returns her to the last safe tile', () => {
   const room = grid([
     '##########', '#........#', '#........#', '#..PPP...#',
