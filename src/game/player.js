@@ -99,15 +99,20 @@ function tileAt(grid, tx, ty) {
  * trigger a room transition.
  */
 export function boxBlocked(grid, x, y, ctx) {
+  const extra = ctx.solid;
   const left = Math.floor(x / SUB);
   const top = Math.floor(y / SUB);
   const right = Math.floor((x + HB_W * SUB - 1) / SUB);
   const bottom = Math.floor((y + HB_H * SUB - 1) / SUB);
   for (let py = top; py <= bottom; py += 1) {
     for (let px = left; px <= right; px += 1) {
-      const ch = tileAt(grid, Math.floor(px / TILE), Math.floor(py / TILE));
+      const tx = Math.floor(px / TILE);
+      const ty = Math.floor(py / TILE);
+      const ch = tileAt(grid, tx, ty);
       if (ch === null) continue;
       if (blocks(ch, ctx)) return true;
+      // Chests and people stand on floor tiles but still stop her.
+      if (extra && extra.has(`${tx},${ty}`)) return true;
     }
   }
   return false;
@@ -137,7 +142,8 @@ function slide(grid, p, dx, dy, ctx) {
  *
  * @param {object} p player
  * @param {string[][]} grid materialised room tiles
- * @param {{dx:number, dy:number, jump:boolean, hasSandals:boolean, frozen:boolean}} input
+ * @param {{dx:number, dy:number, jump:boolean, hasSandals:boolean, frozen:boolean,
+ *   solid?: Set<string>}} input `solid` holds "tx,ty" keys for props that block
  * @returns {{fell:boolean, landed:boolean, jumped:boolean}}
  */
 export function stepPlayer(p, grid, input) {
@@ -166,7 +172,9 @@ export function stepPlayer(p, grid, input) {
   }
   const airborne = isAirborne(p);
   p.aloft = airborne;
-  const ctx = { airborne, hasSandals: input.hasSandals, onLedge: p.onLedge };
+  const ctx = {
+    airborne, hasSandals: input.hasSandals, onLedge: p.onLedge, solid: input.solid,
+  };
 
   // Knockback overrides steering entirely.
   if (p.knock > 0) {

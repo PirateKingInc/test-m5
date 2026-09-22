@@ -10,11 +10,17 @@ import {
 } from './constants.js';
 import { makeRng } from './rng.js';
 import {
-  ROOMS, START_ROOM, materialize, edgeId, dungeonOf,
+  ROOMS, START_ROOM, materialize, edgeId, dungeonOf, openingDirAt, portalAt,
+  signAt, OPENINGS,
 } from './world.js';
 import {
   makePlayer, stepPlayer, edgeCrossed, placeAfterExit, isAirborne, aloft,
+  facingTile, tileUnder, DIR_VEC,
 } from './player.js';
+import {
+  openDialogue, tickDialogue, advanceDialogue, pageComplete,
+} from './dialogue.js';
+import { PROP_TYPES, CHEST_GIVES, makeProp, propIsSolid, propAt } from './props.js';
 import {
   makeEnemy, stepEnemy, stepHazard, hazardBox, maybeDrop,
 } from './enemies.js';
@@ -33,6 +39,7 @@ export const SCENE = {
   PLAY: 'play',
   TRANSITION: 'transition',
   PAUSE: 'pause',
+  DIALOGUE: 'dialogue',
   GAMEOVER: 'gameover',
   ENDING: 'ending',
   CREDITS: 'credits',
@@ -43,7 +50,9 @@ export const SFX = {
   JUMP: 'jump', LAND: 'land', FALL: 'fall', MENU: 'menu', CONFIRM: 'confirm',
   DOOR: 'door', SWING: 'swing', SPIN: 'spin', CLINK: 'clink', HIT: 'hit',
   KILL: 'kill', HURT: 'hurt', SHOT: 'shot', STOMP: 'stomp', HEART: 'heart',
-  CHARGED: 'charged',
+  CHARGED: 'charged', BLIP: 'blip', CHEST: 'chest', KEY: 'key', LOCKED: 'locked',
+  SHATTER: 'shatter', SAVE: 'save', PILLAR: 'pillar', CONTAINER: 'container',
+  PORTAL: 'portal',
 };
 
 /** Entity types in room data that are monsters rather than scenery. */
@@ -60,6 +69,7 @@ function newProgress() {
     chests: new Set(),
     heartsTaken: new Set(),
     bossesBeaten: new Set(),
+    pillars: new Set(),
     maxHp: START_HEARTS * HEART,
   };
 }
@@ -89,6 +99,10 @@ export class Game {
     this.entities = [];
     this.hazards = [];
     this.pickups = [];
+    this.props = [];
+    this.dialogue = null;
+    /** Suppresses a portal until she steps off the stair she arrived on. */
+    this.portalLock = false;
     /** Set when a room is entered, so the host can autosave. */
     this.saveRequested = false;
     /** Frames the room-name banner still has to live. */
@@ -130,8 +144,14 @@ export class Game {
     this.entities = (data.entities ?? [])
       .filter((spec) => MONSTER_TYPES.has(spec.type))
       .map(makeEnemy);
+    this.props = (data.entities ?? [])
+      .filter((spec) => PROP_TYPES.has(spec.type))
+      .filter((spec) => !(spec.type === 'chest' && this.progress.chests.has(spec.id)))
+      .filter((spec) => !(spec.type === 'heart' && this.progress.heartsTaken.has(spec.id)))
+      .map(makeProp);
     this.hazards = [];
     this.pickups = [];
+    this.portalLock = true;
     this.banner = 90;
     this.saveRequested = true;
   }
@@ -160,6 +180,7 @@ export class Game {
       case SCENE.PLAY: this.stepPlay(); break;
       case SCENE.TRANSITION: this.stepTransition(); break;
       case SCENE.PAUSE: this.stepPause(); break;
+      case SCENE.DIALOGUE: this.stepDialogue(); break;
       default: break;
     }
     return this;
@@ -217,6 +238,7 @@ export class Game {
       jump: this.pressed(BTN.B),
       hasSandals: this.progress.upgrades.sandals,
       frozen: p.spin > 0,
+      solid: this.solidPropTiles(),
     });
     if (moved.jumped) this.play(SFX.JUMP);
     if (moved.landed) this.play(SFX.LAND);
@@ -229,9 +251,212 @@ export class Game {
     this.resolveAttacks();
     this.resolveHarm();
     this.resolvePickups();
+    this.openSatisfiedGates();
+    this.checkPortal();
 
     const edge = edgeCrossed(p);
     if (edge) this.beginTransition(edge);
+  }
+
+  /** The tiles props stand on, so collision can treat them as walls. */
+  solidPropTiles() {
+    return new Set(
+      this.props.filter(propIsSolid).map((q) => `${q.tx},${q.ty}`),
+    );
+  }
+
+  say(lines) {
+    this.dialogue = openDialogue(lines);
+    this.scene = SCENE.DIALOGUE;
+  }
+
+  stepDialogue() {
+    if (tickDialogue(this.dialogue)) this.play(SFX.BLIP);
+    if (this.pressed(BTN.A) || this.pressed(BTN.START)) {
+      if (advanceDialogue(this.dialogue) === 'close') {
+        this.dialogue = null;
+        this.scene = SCENE.PLAY;
+      }
+    }
+  }
+
+  // --- context-sensitive A ---------------------------------------------------
+
+  /**
+   * Works out what A means right now. Returns true if it meant something other
+   * than a swing, in which case the blade stays sheathed. There is no menu and
+   * no second item button, so the ordering here IS the interface.
+   */
+  tryInteract() {
+    const p = this.player;
+    if (isAirborne(p)) return false;
+
+    const here = tileUnder(p);
+    if (this.room.grid[here.ty]?.[here.tx] === 'V') {
+      this.saveRequested = true;
+      this.play(SFX.SAVE);
+      this.say(['THE MARKER TAKES', 'YOUR NAME.', 'PROGRESS SAVED.']);
+      return true;
+    }
+
+    const { tx, ty } = facingTile(p);
+    const prop = propAt(this.props, tx, ty);
+    if (prop) return this.useProp(prop);
+
+    const ch = this.room.grid[ty]?.[tx];
+    if (ch === undefined) return false;
+    switch (ch) {
+      case 'S': {
+        const lines = signAt(this.room.id, tx, ty);
+        if (!lines) return false;
+        this.say(lines);
+        return true;
+      }
+      case 'x':
+        this.room.grid[ty][tx] = '.';
+        this.play(SFX.SHATTER);
+        return true;
+      case 'o':
+        return this.pushBlock(tx, ty);
+      case 'C':
+        return this.breakCracked(tx, ty);
+      case 'L':
+        return this.useLock(tx, ty);
+      case 'B':
+        return this.useBossDoor(tx, ty);
+      case 'W':
+        this.say(['SPIRALS, CUT DEEP.', 'IT WANTS TO BE', 'TURNED.']);
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  useProp(prop) {
+    if (prop.kind === 'npc') {
+      this.say(prop.text);
+      return true;
+    }
+    if (prop.kind === 'chest') {
+      if (prop.open) return false;
+      prop.open = true;
+      this.progress.chests.add(prop.id);
+      const gift = CHEST_GIVES[prop.gives];
+      if (prop.gives === 'smallkey') {
+        const d = dungeonOf(this.room.id);
+        if (d) this.progress.keys[d] += 1;
+        this.play(SFX.KEY);
+      } else if (prop.gives === 'bosskey') {
+        const d = dungeonOf(this.room.id);
+        if (d) this.progress.bossKeys[d] = true;
+        this.play(SFX.KEY);
+      } else {
+        this.progress.upgrades[gift.upgrade] = true;
+        this.play(SFX.CHEST);
+      }
+      this.say(gift.announce);
+      return true;
+    }
+    return false;
+  }
+
+  /** Pushes a block one tile, if there is somewhere for it to go. */
+  pushBlock(tx, ty) {
+    const [dx, dy] = DIR_VEC[this.player.dir];
+    const nx = tx + dx;
+    const ny = ty + dy;
+    const target = this.room.grid[ny]?.[nx];
+    if (target !== '.' && target !== ',') {
+      this.play(SFX.CLINK);
+      return true;
+    }
+    if (propAt(this.props, nx, ny)) {
+      this.play(SFX.CLINK);
+      return true;
+    }
+    this.room.grid[ny][nx] = 'o';
+    this.room.grid[ty][tx] = '.';
+    this.play(SFX.DOOR);
+    return true;
+  }
+
+  breakCracked(tx, ty) {
+    if (!this.progress.upgrades.blade) {
+      this.say(['THE STONE IS', 'CRACKED THROUGH.', 'NOTHING YOU CARRY', 'WILL SPLIT IT.']);
+      return true;
+    }
+    this.openEdgeAt(tx, ty);
+    this.play(SFX.SHATTER);
+    return true;
+  }
+
+  useLock(tx, ty) {
+    const d = dungeonOf(this.room.id);
+    if (!d || this.progress.keys[d] <= 0) {
+      this.say(['LOCKED.', 'YOU NEED A SMALL', 'KEY FOR THIS ONE.']);
+      return true;
+    }
+    this.progress.keys[d] -= 1;
+    this.openEdgeAt(tx, ty);
+    this.play(SFX.DOOR);
+    return true;
+  }
+
+  useBossDoor(tx, ty) {
+    const d = dungeonOf(this.room.id);
+    if (!d || !this.progress.bossKeys[d]) {
+      this.say(['A GREAT LOCK.', 'THE VAULT KEY IS', 'ELSEWHERE.']);
+      return true;
+    }
+    this.openEdgeAt(tx, ty);
+    this.play(SFX.DOOR);
+    return true;
+  }
+
+  /** Opens the barrier whose opening contains this tile, on both sides at once. */
+  openEdgeAt(tx, ty) {
+    const dir = openingDirAt(this.room.id, tx, ty);
+    if (!dir) return false;
+    const dest = ROOMS[this.room.id].exits[dir];
+    if (!dest) return false;
+    this.progress.openedDoors.add(edgeId(this.room.id, dest));
+    this.room.grid = materialize(this.room.id, this.progress.openedDoors);
+    return true;
+  }
+
+  /** Gates that wait on a condition rather than a key. */
+  openSatisfiedGates() {
+    const room = ROOMS[this.room.id];
+    for (const [dir, kind] of Object.entries(room.doors ?? {})) {
+      if (!kind.startsWith('gate')) continue;
+      const dest = room.exits[dir];
+      const id = edgeId(this.room.id, dest);
+      if (this.progress.openedDoors.has(id)) continue;
+      const met = kind === 'gate:clear'
+        ? this.roomCleared()
+        : this.progress.pillars.has(this.room.id) || this.progress.pillars.has(dest);
+      if (!met) continue;
+      this.progress.openedDoors.add(id);
+      this.room.grid = materialize(this.room.id, this.progress.openedDoors);
+      this.play(SFX.DOOR);
+    }
+  }
+
+  checkPortal() {
+    const { tx, ty } = tileUnder(this.player);
+    const portal = portalAt(this.room.id, tx, ty);
+    if (!portal) {
+      this.portalLock = false;
+      return;
+    }
+    if (this.portalLock) return;
+    this.play(SFX.PORTAL);
+    this.enterRoom(portal.to);
+    this.player.x = portal.tx * TILE * SUB + ((TILE - HB_W) / 2) * SUB;
+    this.player.y = portal.ty * TILE * SUB + ((TILE - HB_H) / 2) * SUB;
+    this.player.safeX = this.player.x;
+    this.player.safeY = this.player.y;
+    this.player.air = 0;
   }
 
   /**
@@ -248,6 +473,10 @@ export class Game {
     }
 
     if (this.pressed(BTN.A)) {
+      if (this.tryInteract()) {
+        p.charge = 0;
+        return;
+      }
       p.swing = SWING_FRAMES;
       p.swingDir = p.dir;
       p.charge = 0;
@@ -284,6 +513,7 @@ export class Game {
       spawn: (h) => this.hazards.push(h),
     };
     for (const e of this.entities) stepEnemy(e, ctx);
+    for (const q of this.props) q.anim += 1;
     this.hazards = this.hazards.filter((h) => stepHazard(h, this.room.grid));
     this.pickups = this.pickups.filter((q) => (q.life -= 1) > 0);
   }
@@ -320,6 +550,20 @@ export class Game {
       }
     }
     this.entities = this.entities.filter((e) => e.alive || e.hurt > 0);
+
+    if (spinning) this.wakePillar();
+  }
+
+  /** A charged spin is the only thing that turns a whorl pillar. */
+  wakePillar() {
+    if (this.progress.pillars.has(this.room.id)) return;
+    const { tx, ty } = tileUnder(this.player);
+    for (const [dx, dy] of [[0, 0], [0, -1], [0, 1], [-1, 0], [1, 0]]) {
+      if (this.room.grid[ty + dy]?.[tx + dx] !== 'W') continue;
+      this.progress.pillars.add(this.room.id);
+      this.play(SFX.PILLAR);
+      return;
+    }
   }
 
   /** Everything in the room that can hurt Summer, against Summer. */
@@ -357,6 +601,18 @@ export class Game {
 
   resolvePickups() {
     const pb = playerBox(this.player);
+    for (const prop of this.props) {
+      if (prop.kind !== 'heart') continue;
+      const box = { x: prop.x, y: prop.y, w: TILE * SUB, h: TILE * SUB };
+      if (!overlaps(pb, box)) continue;
+      this.props = this.props.filter((q) => q !== prop);
+      this.progress.heartsTaken.add(prop.id);
+      this.progress.maxHp = Math.min(MAX_HEARTS * HEART, this.progress.maxHp + HEART);
+      this.player.hp = this.progress.maxHp;
+      this.play(SFX.CONTAINER);
+      this.say(['A HEART CONTAINER.', 'YOU CAN TAKE ONE', 'MORE HIT NOW.']);
+      return;
+    }
     this.pickups = this.pickups.filter((q) => {
       if (!overlaps(pb, { x: q.x, y: q.y, w: 8 * SUB, h: 8 * SUB })) return true;
       if (q.kind === 'halfheart') {
@@ -451,7 +707,10 @@ export class Game {
         : null,
       airborne: this.player ? isAirborne(this.player) : false,
       keys: { ...this.progress.keys },
+      bossKeys: { ...this.progress.bossKeys },
       upgrades: { ...this.progress.upgrades },
+      doors: this.progress.openedDoors.size,
+      chests: this.progress.chests.size,
     };
   }
 }

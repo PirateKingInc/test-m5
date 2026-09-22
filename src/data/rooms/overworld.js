@@ -23,7 +23,7 @@ export const OVERWORLD = {
     },
     entities: [
       {
-        type: 'npc', x: 6, y: 4, sprite: 'mabel', name: 'MABEL',
+        type: 'npc', x: 6, y: 5, sprite: 'mabel', name: 'MABEL',
         text: [
           'SUMMER. GOOD.',
           'YOU CAN STILL',
@@ -125,7 +125,7 @@ export const OVERWORLD = {
     exits: {s: 'ow_southmire', n: 'ow_northgate', e: 'ow_eastfen'},
     entities: [
       {
-        type: 'npc', x: 6, y: 4, sprite: 'tamsin', name: 'TAMSIN',
+        type: 'npc', x: 6, y: 5, sprite: 'tamsin', name: 'TAMSIN',
         text: [
           'I CUT REEDS HERE',
           'TILL THE QUIET',
@@ -208,7 +208,7 @@ export const OVERWORLD = {
     },
     entities: [
       {
-        type: 'npc', x: 6, y: 4, sprite: 'orrin', name: 'ORRIN',
+        type: 'npc', x: 6, y: 5, sprite: 'orrin', name: 'ORRIN',
         text: [
           'I RANG THAT BELL',
           'FORTY YEARS.',
