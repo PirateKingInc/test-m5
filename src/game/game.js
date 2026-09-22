@@ -385,9 +385,16 @@ export class Game {
 
     const here = tileUnder(p);
     if (this.room.grid[here.ty]?.[here.tx] === 'V') {
+      // A marker is a place to get your breath back as well as a checkpoint.
+      // Without that, the only renewable health in the game is a one-in-two
+      // roll on a kill, and a bad run has no way back.
+      const hurt = p.hp < this.progress.maxHp;
+      p.hp = this.progress.maxHp;
       this.saveRequested = true;
       this.play(SFX.SAVE);
-      this.say(['THE MARKER TAKES', 'YOUR NAME.', 'PROGRESS SAVED.']);
+      this.say(hurt
+        ? ['THE MARKER TAKES', 'YOUR NAME.', '', 'YOU BREATHE. THE', 'ACHE GOES OUT OF', 'YOUR ARM.']
+        : ['THE MARKER TAKES', 'YOUR NAME.', 'PROGRESS SAVED.']);
       return true;
     }
 
@@ -773,7 +780,10 @@ export class Game {
       if (e.flying && !offGround) continue;
       const c = centreOf(enemyBox(e));
       this.play(SFX.HURT);
-      this.damage(2, c.x, c.y);
+      // Ordinary monsters graze. Only the two bosses and a root spike take a
+      // whole heart: with three to start and every room repopulating behind
+      // her, a heart per bump makes the first dungeon a war of attrition.
+      this.damage(1, c.x, c.y);
       return;
     }
 
@@ -795,8 +805,9 @@ export class Game {
       if (h.groundOnly && offGround) continue;
       const c = centreOf(hazardBox(h));
       this.play(SFX.HURT);
-      // Ranged attacks graze; only bodies and root spikes cost a whole heart.
-      this.damage(h.kind === 'spike' ? 2 : 1, c.x, c.y);
+      // Everything thrown, rolled or grown at her grazes. Only a body costs a
+      // whole heart, and only a boss's body at that.
+      this.damage(1, c.x, c.y);
       return;
     }
   }

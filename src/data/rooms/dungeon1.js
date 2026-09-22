@@ -53,7 +53,7 @@ export const DUNGEON1 = {
     grid: [1, 2],
     tiles: [
       '####..####',
-      '#.#....#.#',
+      '#V#....#.#',
       '#.#....#.#',
       '..........',
       '..........',
@@ -64,7 +64,7 @@ export const DUNGEON1 = {
     exits: {s: 'd1_entry', n: 'd1_pitroom', e: 'd1_guard', w: 'd1_cistern'},
     entities: [
       {type: 'brumbler', x: 4, y: 2},
-      {type: 'brumbler', x: 5, y: 5},
+      {type: 'snag', x: 5, y: 5},
     ],
   },
   d1_guard: {

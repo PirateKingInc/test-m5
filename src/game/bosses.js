@@ -102,7 +102,7 @@ const BEHAVIOUR = {
     if (b.phase === 1) {
       b.shell = false;
       drift(b, ctx.player, 5);
-      if (b.timer % 90 === 0) {
+      if (b.timer % 130 === 0) {
         const tx = Math.floor(you.x / SUB / TILE);
         const ty = Math.floor(you.y / SUB / TILE);
         for (const dx of [-1, 0, 1]) {
@@ -189,16 +189,29 @@ const BEHAVIOUR = {
         ctx.spawnEnemy(makeEnemy({ type: 'mothkin', x: 7, y: 5 }));
         ctx.sound('roar');
       }
+      // Both lanes onto the ledge are covered, east and south, so the corner
+      // is not a free hit: there is a rhythm to step out of, not a safe spot.
       if (b.timer % 120 === 45) {
         const c = centreOf(bossBox(b));
         ctx.spawn(makeNote(c.x, c.y, 20, 0));
+        ctx.spawn(makeNote(c.x, c.y, 0, 20));
       }
       return;
     }
 
     // Phase three: up out of a grounded swing's reach, waves along the floor.
     b.z = HOVER_Z;
-    drift(b, ctx.player, 5, 5, ROOM_W - 1);
+    // It lifts out of the corner and crosses the chasm under its own power.
+    // Snapping to the far side the instant the phase turns over teleports it
+    // on top of whoever is half way across, which is no way to lose a heart.
+    const home = 5 * TILE * SUB;
+    if (b.x < home) {
+      b.x = Math.min(home, b.x + 5);
+      b.y += Math.sign(you.y - centreOf(bossBox(b)).y) * 3;
+      keepInRoom(b);
+    } else {
+      drift(b, ctx.player, 5, 5, ROOM_W - 1);
+    }
     if (b.timer % 110 === 0) {
       const c = centreOf(bossBox(b));
       for (const dir of ['left', 'up', 'down']) ctx.spawn(makeShockwave(c.x, c.y, dir));

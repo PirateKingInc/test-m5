@@ -150,6 +150,11 @@ export function stepPlayer(p, grid, input) {
   const out = { fell: false, landed: false, jumped: false };
 
   if (p.falling > 0) {
+    // Down a hole is not in the air: leaving `aloft` set from the hop that
+    // took her over the edge leaves it set for the whole drop and the whole
+    // recovery, and anything reading it - the ground-attack immunity, a bot
+    // waiting for her feet - believes it.
+    p.aloft = false;
     p.falling -= 1;
     if (p.falling === 0) {
       p.x = p.safeX;
