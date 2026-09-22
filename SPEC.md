@@ -115,7 +115,7 @@ No 3-tile pit exists in the game, so the sandals are never insufficient.
 
 ## 6. World map
 
-39 rooms. Every exit below is bidirectional unless it says otherwise; the CI
+41 rooms. Every exit below is bidirectional unless it says otherwise; the CI
 map-integrity check (`tools/verify-map.js`) fails the build if any exit lacks a
 matching entrance on the other side, if any room is unreachable, or if the ASCII
 border openings disagree with the declared exits.
@@ -146,7 +146,7 @@ y=2  ow_cinderhome ——  ow_southmire  ——  ow_mirevault   ——  ow_shore
 | `ow_cliffside` | **heart container** on a raised ledge (U2). |
 | `ow_eastfen` | water, Spitfens, Brumbler. |
 
-### 6.2 Dungeon 1 — The Mire Vaults (12 rooms)
+### 6.2 Dungeon 1 — The Mire Vaults (14 rooms)
 
 ```
         x=0             x=1              x=2             x=3
