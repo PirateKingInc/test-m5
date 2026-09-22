@@ -21,6 +21,7 @@ import {
   openDialogue, tickDialogue, advanceDialogue, pageComplete,
 } from './dialogue.js';
 import { PROP_TYPES, CHEST_GIVES, makeProp, propIsSolid, propAt } from './props.js';
+import { serialize, deserialize } from './save.js';
 import {
   makeEnemy, stepEnemy, stepHazard, hazardBox, maybeDrop,
 } from './enemies.js';
@@ -125,8 +126,51 @@ export class Game {
     this.player = makePlayer(4, 4);
     this.room = null;
     this.transition = null;
+    this.dialogue = null;
     this.enterRoom(START_ROOM);
     this.scene = SCENE.PLAY;
+  }
+
+  /** The current run as a plain object, for the host to store however it likes. */
+  toSave() {
+    return serialize(this);
+  }
+
+  /**
+   * Restores a run. Returns false and changes nothing if the blob is corrupt,
+   * from another version, or names a room that no longer exists.
+   * @param {unknown} blob
+   */
+  loadSave(blob) {
+    const s = deserialize(blob, ROOMS);
+    if (!s) return false;
+
+    this.rng = makeRng(s.rng);
+    this.progress = {
+      upgrades: s.upgrades,
+      keys: s.keys,
+      bossKeys: s.bossKeys,
+      openedDoors: s.openedDoors,
+      chests: s.chests,
+      heartsTaken: s.heartsTaken,
+      bossesBeaten: s.bossesBeaten,
+      pillars: s.pillars,
+      maxHp: s.maxHp,
+    };
+    this.player = makePlayer(0, 0);
+    this.player.x = s.x;
+    this.player.y = s.y;
+    this.player.safeX = s.x;
+    this.player.safeY = s.y;
+    this.player.dir = s.dir;
+    this.player.hp = s.hp;
+    this.player.maxHp = s.maxHp;
+    this.transition = null;
+    this.dialogue = null;
+    this.room = null;
+    this.enterRoom(s.room);
+    this.scene = SCENE.PLAY;
+    return true;
   }
 
   /**
