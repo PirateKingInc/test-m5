@@ -123,6 +123,19 @@ export class Bot {
     return null;
   }
 
+  /** Retire finished objectives, however they got finished. */
+  retire() {
+    const g = this.game;
+    while (this.objective && done(this.objective, g)) {
+      this.log.push({ frame: g.frame, did: this.objective.label, room: g.room.id, hp: g.player.hp });
+      this.index += 1;
+      this.path = null;
+      this.act = null;
+      this.committed = null;
+      this.objectiveSince = g.frame;
+    }
+  }
+
   decide() {
     const g = this.game;
     this.pulse += 1;
@@ -134,15 +147,7 @@ export class Bot {
     if (g.scene !== SCENE.PLAY) return 0;
     if (g.player.falling > 0) return 0;
 
-    // Retire finished objectives, however they got finished.
-    while (this.objective && done(this.objective, g)) {
-      this.log.push({ frame: g.frame, did: this.objective.label, room: g.room.id, hp: g.player.hp });
-      this.index += 1;
-      this.path = null;
-      this.act = null;
-      this.committed = null;
-      this.objectiveSince = g.frame;
-    }
+    this.retire();
     if (!this.objective) return 0;
     if (this.objectiveSince === undefined) this.objectiveSince = g.frame;
 
@@ -241,7 +246,12 @@ export class Bot {
     const nav = this.travel(station);
 
     // Whatever she is walking into gets slipped around, not backed away from.
-    const crowd = Fighter.crowding(g, 15);
+    // Not while stalled, though: the slip is perpendicular to the step it is
+    // given, and the steps that keep her in lane are perpendicular to the way
+    // she is going - so slipping one of those walks her sideways off the
+    // route. Two Palebucklers pacing the Cloister deflected her back out of
+    // the room they were in, over and over, for the rest of the run.
+    const crowd = stalled ? null : Fighter.crowding(g, 15);
     if (crowd && nav) {
       const around = this.fighter.deflect(g, nav, crowd);
       if (around !== nav) this.why = 'around';
@@ -414,6 +424,10 @@ export function playthrough({ budget = DEFAULT_BUDGET, trace = false } = {}) {
     if (game.scene === SCENE.GAMEOVER) break;
     if (game.scene === SCENE.CREDITS || (game.scene === SCENE.TITLE && frames.length > 100)) break;
   }
+
+  // The run ends on the credits, which `decide` never sees, so the last
+  // objective would otherwise be reported as unfinished.
+  bot.retire();
 
   if (trace) for (const e of bot.log) console.log(`  ${String(e.frame).padStart(6)}  ${e.room.padEnd(16)} hp ${e.hp}  ${e.did}`);
 
