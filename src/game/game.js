@@ -5,15 +5,23 @@
 
 import {
   START_HEARTS, HEART, TRANSITION_FRAMES, WORLD_SEED, TILE, SUB, HB_W, HB_H,
-  IFRAMES, KNOCKBACK_SPEED, KNOCKBACK_FRAMES,
+  IFRAMES, KNOCKBACK_SPEED, KNOCKBACK_FRAMES, SWING_FRAMES, CHARGE_FRAMES,
+  SPIN_FRAMES, MAX_HEARTS,
 } from './constants.js';
 import { makeRng } from './rng.js';
 import {
   ROOMS, START_ROOM, materialize, edgeId, dungeonOf,
 } from './world.js';
 import {
-  makePlayer, stepPlayer, edgeCrossed, placeAfterExit, isAirborne,
+  makePlayer, stepPlayer, edgeCrossed, placeAfterExit, isAirborne, aloft,
 } from './player.js';
+import {
+  makeEnemy, stepEnemy, stepHazard, hazardBox, maybeDrop,
+} from './enemies.js';
+import {
+  playerBox, enemyBox, swingBox, spinBox, swingZ, zOverlaps, overlaps,
+  connects, centreOf,
+} from './combat.js';
 
 /** Button bits. The hardware has a d-pad and exactly two buttons, plus Start. */
 export const BTN = {
@@ -33,8 +41,15 @@ export const SCENE = {
 /** Sound events the audio engine drains each frame. Game logic never plays anything. */
 export const SFX = {
   JUMP: 'jump', LAND: 'land', FALL: 'fall', MENU: 'menu', CONFIRM: 'confirm',
-  DOOR: 'door',
+  DOOR: 'door', SWING: 'swing', SPIN: 'spin', CLINK: 'clink', HIT: 'hit',
+  KILL: 'kill', HURT: 'hurt', SHOT: 'shot', STOMP: 'stomp', HEART: 'heart',
+  CHARGED: 'charged',
 };
+
+/** Entity types in room data that are monsters rather than scenery. */
+const MONSTER_TYPES = new Set([
+  'snag', 'brumbler', 'palebuckler', 'mothkin', 'thudder', 'spitfen',
+]);
 
 function newProgress() {
   return {
@@ -70,6 +85,10 @@ export class Game {
     this.player = null;
     this.room = null;
     this.transition = null;
+    /** Live monsters, projectiles and dropped pickups in the current room. */
+    this.entities = [];
+    this.hazards = [];
+    this.pickups = [];
     /** Set when a room is entered, so the host can autosave. */
     this.saveRequested = false;
     /** Frames the room-name banner still has to live. */
@@ -108,6 +127,11 @@ export class Game {
       area: data.area,
       grid: materialize(roomId, this.progress.openedDoors),
     };
+    this.entities = (data.entities ?? [])
+      .filter((spec) => MONSTER_TYPES.has(spec.type))
+      .map(makeEnemy);
+    this.hazards = [];
+    this.pickups = [];
     this.banner = 90;
     this.saveRequested = true;
   }
@@ -185,12 +209,14 @@ export class Game {
     if (this.banner > 0) this.banner -= 1;
 
     const p = this.player;
+    this.stepSword();
+
     const moved = stepPlayer(p, this.room.grid, {
       dx: (this.down(BTN.RIGHT) ? 1 : 0) - (this.down(BTN.LEFT) ? 1 : 0),
       dy: (this.down(BTN.DOWN) ? 1 : 0) - (this.down(BTN.UP) ? 1 : 0),
       jump: this.pressed(BTN.B),
       hasSandals: this.progress.upgrades.sandals,
-      frozen: false,
+      frozen: p.spin > 0,
     });
     if (moved.jumped) this.play(SFX.JUMP);
     if (moved.landed) this.play(SFX.LAND);
@@ -199,8 +225,151 @@ export class Game {
       this.damage(1, 0, 0, true);
     }
 
+    this.stepEntities();
+    this.resolveAttacks();
+    this.resolveHarm();
+    this.resolvePickups();
+
     const edge = edgeCrossed(p);
     if (edge) this.beginTransition(edge);
+  }
+
+  /**
+   * A is one button doing several jobs. A press swings. Holding it, once the
+   * Whorl Charm is found, winds up a spin that is released on let-go; letting
+   * go early just leaves you with the swing you already got.
+   */
+  stepSword() {
+    const p = this.player;
+    if (p.swing > 0) p.swing -= 1;
+    if (p.spin > 0) {
+      p.spin -= 1;
+      return;
+    }
+
+    if (this.pressed(BTN.A)) {
+      p.swing = SWING_FRAMES;
+      p.swingDir = p.dir;
+      p.charge = 0;
+      this.play(SFX.SWING);
+    }
+
+    if (this.progress.upgrades.charm && this.down(BTN.A)) {
+      p.charge += 1;
+      if (p.charge === CHARGE_FRAMES) this.play(SFX.CHARGED);
+    } else if (!this.down(BTN.A)) {
+      if (p.charge >= CHARGE_FRAMES) {
+        p.spin = SPIN_FRAMES;
+        p.swing = 0;
+        this.play(SFX.SPIN);
+      }
+      p.charge = 0;
+    }
+  }
+
+  /** True while the blade is actually out, rather than merely recovering. */
+  get swinging() {
+    return this.player.swing > SWING_FRAMES - 8;
+  }
+
+  get spinning() {
+    return this.player.spin > 0;
+  }
+
+  stepEntities() {
+    const ctx = {
+      grid: this.room.grid,
+      player: this.player,
+      rng: this.rng,
+      spawn: (h) => this.hazards.push(h),
+    };
+    for (const e of this.entities) stepEnemy(e, ctx);
+    this.hazards = this.hazards.filter((h) => stepHazard(h, this.room.grid));
+    this.pickups = this.pickups.filter((q) => (q.life -= 1) > 0);
+  }
+
+  /** Summer's blade against everything it can reach this frame. */
+  resolveAttacks() {
+    const p = this.player;
+    const spinning = this.spinning;
+    if (!spinning && !this.swinging) return;
+
+    const area = spinning ? spinBox(p) : swingBox(p);
+    const dir = spinning ? null : p.swingDir;
+    const zr = spinning ? [0, 14] : swingZ(p);
+    const power = this.progress.upgrades.blade ? 2 : 1;
+
+    for (const e of this.entities) {
+      if (!e.alive || e.hurt > 0) continue;
+      if (!overlaps(area, enemyBox(e))) continue;
+      if (!zOverlaps(zr, e.z)) continue;
+      if (!connects(e, dir)) {
+        e.hurt = 10;
+        this.play(SFX.CLINK);
+        continue;
+      }
+      e.hp -= spinning ? power + 1 : power;
+      e.hurt = 18;
+      if (e.hp <= 0) {
+        e.alive = false;
+        this.play(SFX.KILL);
+        const drop = maybeDrop(e, this.rng);
+        if (drop) this.pickups.push(drop);
+      } else {
+        this.play(SFX.HIT);
+      }
+    }
+    this.entities = this.entities.filter((e) => e.alive || e.hurt > 0);
+  }
+
+  /** Everything in the room that can hurt Summer, against Summer. */
+  resolveHarm() {
+    const p = this.player;
+    if (p.falling > 0 || p.iframes > 0) return;
+    const pb = playerBox(p);
+    // Off the ground is a boolean, not a height. Using the drawn arc would leave
+    // her vulnerable on the first and last frame of every jump, which would make
+    // "jump the shockwave" a matter of luck instead of a rule.
+    const offGround = aloft(p);
+
+    for (const e of this.entities) {
+      if (!e.alive) continue;
+      if (!overlaps(pb, enemyBox(e))) continue;
+      // A hovering Mothkin only touches her when she is up there with it.
+      if (e.flying && !offGround) continue;
+      const c = centreOf(enemyBox(e));
+      this.play(SFX.HURT);
+      this.damage(2, c.x, c.y);
+      return;
+    }
+
+    for (const h of this.hazards) {
+      if (h.warn > 0) continue;
+      if (!overlaps(pb, hazardBox(h))) continue;
+      // The whole design of a shockwave: it is only dangerous on the ground.
+      if (h.groundOnly && offGround) continue;
+      const c = centreOf(hazardBox(h));
+      this.play(SFX.HURT);
+      this.damage(h.kind === 'shockwave' ? 1 : 2, c.x, c.y);
+      return;
+    }
+  }
+
+  resolvePickups() {
+    const pb = playerBox(this.player);
+    this.pickups = this.pickups.filter((q) => {
+      if (!overlaps(pb, { x: q.x, y: q.y, w: 8 * SUB, h: 8 * SUB })) return true;
+      if (q.kind === 'halfheart') {
+        this.player.hp = Math.min(this.progress.maxHp, this.player.hp + 1);
+        this.play(SFX.HEART);
+      }
+      return false;
+    });
+  }
+
+  /** True when nothing hostile is left standing. Condition gates read this. */
+  roomCleared() {
+    return this.entities.every((e) => !e.alive);
   }
 
   beginTransition(dir) {
@@ -251,8 +420,11 @@ export class Game {
     p.hp = Math.max(0, p.hp - halves);
     p.iframes = IFRAMES;
     if (!noKnock) {
-      const dx = p.x - fromX;
-      const dy = p.y - fromY;
+      // Measured centre to centre: using her top-left corner would push her the
+      // wrong way whenever the source sat between her corner and her middle.
+      const me = centreOf(playerBox(p));
+      const dx = me.x - fromX;
+      const dy = me.y - fromY;
       const mag = Math.hypot(dx, dy) || 1;
       p.knockX = Math.round((dx / mag) * KNOCKBACK_SPEED);
       p.knockY = Math.round((dy / mag) * KNOCKBACK_SPEED);

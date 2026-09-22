@@ -9,8 +9,10 @@
 import { PALETTE } from '../data/palette.js';
 import { TILES, METATILES, TILE_ART } from '../data/tiles.js';
 import { glyph, CELL_W, CELL_H, GLYPH_W, GLYPH_H } from '../data/font.js';
-import { SUMMER } from '../data/sprites.js';
-import { FULL_HEART, HALF_HEART, EMPTY_HEART } from '../data/sprites.js';
+import {
+  SUMMER, SWORD, SPIN, MONSTERS, BUCKLER, SEED, NOTE, SHOCKWAVE, ROOT_SPIKE,
+  FULL_HEART, HALF_HEART, EMPTY_HEART,
+} from '../data/sprites.js';
 import {
   SCREEN_W, SCREEN_H, HUD_H, VIEW_W, VIEW_H, TILE, SUB, HB_W, HB_H,
   SPRITE_OX, SPRITE_OY, TRANSITION_FRAMES,
@@ -210,10 +212,13 @@ export class Renderer {
       const inX = outX + dx * VIEW_W;
       const inY = outY + dy * VIEW_H;
       this.drawGrid(game.room.grid, inX, HUD_H + inY);
+      this.drawRoomContents(game, inX, HUD_H + inY);
       this.drawPlayer(game, inX, HUD_H + inY);
     } else {
       this.drawGrid(game.room.grid, 0, HUD_H);
+      this.drawRoomContents(game, 0, HUD_H);
       this.drawPlayer(game, 0, HUD_H);
+      this.drawBlade(game, 0, HUD_H);
     }
 
     this.drawHud(game);
@@ -247,6 +252,78 @@ export class Renderer {
     }
   }
 
+  /** Monsters, their projectiles, and anything they dropped. */
+  drawRoomContents(game, ox, oy) {
+    for (const q of game.pickups) {
+      // Blink out over the last second so a pickup never vanishes unannounced.
+      if (q.life < 60 && Math.floor(q.life / 4) % 2 === 0) continue;
+      this.sprite(HALF_HEART, Math.round(ox + q.x / SUB), Math.round(oy + q.y / SUB));
+    }
+
+    for (const h of game.hazards) {
+      const x = Math.round(ox + h.x / SUB);
+      const y = Math.round(oy + h.y / SUB);
+      if (h.kind === 'seed') this.sprite(SEED, x, y);
+      else if (h.kind === 'note') this.sprite(NOTE, x, y);
+      else if (h.kind === 'shockwave') this.sprite(SHOCKWAVE[Math.floor(h.anim / 6) % 2], x, y);
+      else if (h.kind === 'spike') {
+        // Telegraph first, hurt second.
+        if (h.warn > 0) {
+          if (Math.floor(h.warn / 4) % 2 === 0) this.box(x + 2, y + 2, 12, 12, 3);
+        } else {
+          this.sprite(ROOT_SPIKE, x, y);
+        }
+      }
+    }
+
+    // Back to front, so a monster lower on screen overlaps one above it.
+    const order = [...game.entities].sort((a, b) => a.y - b.y);
+    for (const e of order) {
+      if (!e.alive && e.hurt <= 0) continue;
+      if (e.hurt > 0 && Math.floor(game.frame / 2) % 2 === 0) continue;
+      const art = MONSTERS[e.kind];
+      if (!art) continue;
+      const x = Math.round(ox + e.x / SUB - 2);
+      const y = Math.round(oy + e.y / SUB - 4 - (e.z ?? 0));
+      this.sprite(art[Math.floor(e.anim / 10) % 2], x, y);
+      if (e.shielded) {
+        const side = e.dir === 'left' || e.dir === 'right';
+        const shield = side ? BUCKLER.side : e.dir === 'up' ? BUCKLER.up : BUCKLER.down;
+        this.sprite(shield, x, y, { flipX: e.dir === 'right' });
+      }
+      if (e.z > 0) {
+        this.sprite(
+          ['..####..', '.######.', '..####..'],
+          x + 4, Math.round(oy + e.y / SUB + 10), { solid: 2 },
+        );
+      }
+    }
+  }
+
+  /** The blade, drawn over the world so it reads as reaching past her. */
+  drawBlade(game, ox, oy) {
+    const p = game.player;
+    if (!p || p.falling > 0) return;
+    const bx = Math.round(ox + p.x / SUB + SPRITE_OX);
+    const by = Math.round(oy + p.y / SUB + SPRITE_OY - jumpHeight(p));
+
+    if (p.spin > 0) {
+      this.sprite(SPIN[Math.floor(p.spin / 4) % 2], bx, by, { solid: 3 });
+      return;
+    }
+    if (p.swing <= 0) return;
+    const d = p.swingDir;
+    const art = d === 'up' ? SWORD.up : d === 'down' ? SWORD.down : SWORD.side;
+    const dx = d === 'left' ? -10 : d === 'right' ? 10 : 0;
+    const dy = d === 'up' ? -10 : d === 'down' ? 10 : 0;
+    this.sprite(art, bx + dx, by + dy, { flipX: d === 'right' });
+
+    // A charged spin is worth announcing before it goes off.
+    if (p.charge >= 30 && Math.floor(game.frame / 4) % 2 === 0) {
+      this.box(bx + 1, by + 1, 14, 14, 3);
+    }
+  }
+
   drawPlayer(game, ox, oy) {
     const p = game.player;
     if (!p) return;
@@ -262,8 +339,13 @@ export class Renderer {
     if (p.iframes > 0 && Math.floor(game.frame / 3) % 2 === 0) return;
 
     const facingSide = p.dir === 'left' || p.dir === 'right';
-    const pose = facingSide ? SUMMER.side : p.dir === 'up' ? SUMMER.up : SUMMER.down;
-    const frame = p.moving ? pose[Math.floor(p.anim / 8) % pose.length] : pose[0];
+    const attacking = p.swing > 0 || p.spin > 0;
+    const dir = attacking ? p.swingDir : p.dir;
+    const side = dir === 'left' || dir === 'right';
+    const pose = attacking
+      ? (side ? SUMMER.attackSide : dir === 'up' ? SUMMER.attackUp : SUMMER.attackDown)
+      : (facingSide ? SUMMER.side : p.dir === 'up' ? SUMMER.up : SUMMER.down);
+    const frame = attacking || !p.moving ? pose[0] : pose[Math.floor(p.anim / 8) % pose.length];
     const lift = jumpHeight(p);
 
     const x = Math.round(ox + p.x / SUB + SPRITE_OX);
@@ -278,7 +360,7 @@ export class Renderer {
         { solid: 2 },
       );
     }
-    this.sprite(frame, x, y, { flipX: p.dir === 'right' });
+    this.sprite(frame, x, y, { flipX: dir === 'right' });
   }
 
   drawHud(game) {
