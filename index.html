@@ -89,6 +89,14 @@
     text-align: center;
     line-height: 1.5;
   }
+  /* Sound is not a game control - it is not on the pad, and it never feeds
+     the button mask. The game is still played with a d-pad and two buttons. */
+  #mute {
+    height: 26px;
+    padding: 0 12px;
+    font-size: 11px;
+    border-radius: 13px;
+  }
   @media (hover: hover) and (pointer: fine) {
     #controls { display: none; }
   }
@@ -116,6 +124,7 @@
   <p class="hint">
     ARROWS / WASD move &nbsp;&middot;&nbsp; Z = A (sword, talk) &nbsp;&middot;&nbsp; X = B (jump) &nbsp;&middot;&nbsp; ENTER = START
   </p>
+  <button id="mute" class="btn" type="button" aria-pressed="false">&#9834; SOUND ON</button>
 </main>
 <script type="module" src="./src/main.js"></script>
 </body>
