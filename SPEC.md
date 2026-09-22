@@ -67,12 +67,20 @@ Numbering reflects the intended pick-up order: U1 → U3 → U2.
 
 ### Measured distances (subpixel units, 16 subpx = 1 px, 16 px = 1 tile)
 
-| | airtime | air speed | travel | clears |
-| --- | --- | --- | --- | --- |
-| base jump | 26 frames | 24 subpx/f | 624 subpx (39 px) | 1-tile pit (needs 26 px) |
-| Gale Sandals | 36 frames | 24 subpx/f | 864 subpx (54 px) | 2-tile pit (needs 42 px), never a 3-tile pit (needs 58 px) |
+Summer falls when the tile under her **centre** is a pit. Crossing a pit W tiles
+wide therefore means carrying her centre from just before the pit to just past
+it: **16W + 1 pixels**. A 1-tile pit needs 17 px, 2 tiles need 33, 3 need 49.
 
-No 3-tile pit exists in the game, so the sandals are never insufficient.
+| | airtime | air speed | travel | clears | fails |
+| --- | --- | --- | --- | --- | --- |
+| base jump | 20 frames | 24 subpx/f (1.5 px) | 480 subpx (30.0 px) | 1-tile pit (17 px) | 2-tile pit (33 px) |
+| Gale Sandals | 31 frames | 24 subpx/f (1.5 px) | 744 subpx (46.5 px) | 2-tile pit (33 px) | 3-tile pit (49 px) |
+
+Both jumps have margin at the bottom of their range and headroom below the next
+one up, so neither is frame-perfect and neither overreaches. Each leaves a
+**14-frame window** in which the jump may be started and still clear the pit it
+is meant for, which is forgiving without being free. No 3-tile pit exists in the
+game, so the sandals are never insufficient.
 
 ---
 

@@ -4,8 +4,119 @@
 <meta charset="utf-8">
 <title>Brackenfall: The Long Hush</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="description" content="Brackenfall: The Long Hush - an original top-down action-adventure. Relight two wick-stones before the valley goes quiet.">
+<meta name="theme-color" content="#0b1310">
+<style>
+  :root {
+    --ink: #0b1310;
+    --dark: #2f5245;
+    --mid: #78a68c;
+    --light: #dfeedb;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--ink);
+    color: var(--light);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    /* No scrolling, no pinch-zoom, no double-tap zoom while playing. */
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #shell {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px;
+  }
+  canvas#screen {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    background: var(--light);
+    border: 2px solid var(--dark);
+  }
+  #controls {
+    width: 100%;
+    max-width: 420px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    gap: 12px;
+  }
+  #controls.hidden { display: none; }
+  .dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 44px);
+    grid-template-rows: repeat(3, 44px);
+    justify-content: start;
+  }
+  .face {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+  .btn {
+    background: var(--dark);
+    color: var(--light);
+    border: 2px solid var(--mid);
+    border-radius: 8px;
+    font: inherit;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+  }
+  .btn:active { background: var(--mid); color: var(--ink); }
+  .round { width: 52px; height: 52px; border-radius: 50%; font-size: 18px; }
+  .start { width: 76px; height: 30px; font-size: 12px; border-radius: 15px; }
+  .pad-u { grid-area: 1 / 2; } .pad-l { grid-area: 2 / 1; }
+  .pad-r { grid-area: 2 / 3; } .pad-d { grid-area: 3 / 2; }
+  .pad-c { grid-area: 2 / 2; background: var(--dark); border: 2px solid var(--mid); }
+  .hint {
+    font-size: 11px;
+    color: var(--mid);
+    text-align: center;
+    line-height: 1.5;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    #controls { display: none; }
+  }
+</style>
 </head>
 <body>
-<p>Brackenfall is being built. Check back after the next deploy.</p>
+<main id="shell">
+  <canvas id="screen" width="160" height="144" aria-label="Brackenfall game screen"></canvas>
+
+  <div id="controls">
+    <div class="dpad">
+      <button class="btn pad-u" data-btn="UP" aria-label="up">&#9650;</button>
+      <button class="btn pad-l" data-btn="LEFT" aria-label="left">&#9664;</button>
+      <div class="pad-c"></div>
+      <button class="btn pad-r" data-btn="RIGHT" aria-label="right">&#9654;</button>
+      <button class="btn pad-d" data-btn="DOWN" aria-label="down">&#9660;</button>
+    </div>
+    <div class="face">
+      <button class="btn start" data-btn="START">START</button>
+      <button class="btn round" data-btn="B">B</button>
+      <button class="btn round" data-btn="A">A</button>
+    </div>
+  </div>
+
+  <p class="hint">
+    ARROWS / WASD move &nbsp;&middot;&nbsp; Z = A (sword, talk) &nbsp;&middot;&nbsp; X = B (jump) &nbsp;&middot;&nbsp; ENTER = START
+  </p>
+</main>
+<script type="module" src="./src/main.js"></script>
 </body>
 </html>
