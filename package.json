@@ -1,0 +1,20 @@
+{
+  "name": "brackenfall",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Brackenfall: The Long Hush - an original top-down action-adventure for the browser",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "verify:map": "node tools/verify-map.js",
+    "verify:progression": "node tools/verify-progression.js",
+    "verify:softlock": "node tools/verify-softlock.js",
+    "bot": "node tools/bot.js",
+    "verify": "npm run verify:map && npm run verify:progression && npm run verify:softlock && npm run bot",
+    "check": "npm run verify && npm test",
+    "ci": "npm test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
