@@ -17,9 +17,12 @@ export const BOSS_W = 32;
 export const BOSS_H = 32;
 
 export const BOSS_STATS = {
-  sapwarden: { hp: 12, phases: [12, 9, 5], name: 'THE SAP-WARDEN' },
-  chorister: { hp: 16, phases: [16, 12, 6], name: 'THE HOLLOW CHORISTER' },
+  sapwarden: { hp: 24, phases: [24, 16, 8], name: 'THE SAP-WARDEN' },
+  chorister: { hp: 24, phases: [24, 18, 10], name: 'THE HOLLOW CHORISTER' },
 };
+
+/** Frames a boss spends flashing after a hit, during which nothing lands. */
+export const BOSS_HURT = 24;
 
 export function makeBoss(spec) {
   const stats = BOSS_STATS[spec.kind];
@@ -153,9 +156,9 @@ const BEHAVIOUR = {
 
     if (b.phase === 1) {
       b.z = 0;
-      // Stays on the east side of the chasm, where Summer is.
+      // Stays on the open side of the chasm, where Summer can reach it.
       drift(b, ctx.player, 4, 5, ROOM_W - 1);
-      if (b.timer % 75 === 0) {
+      if (b.timer % 95 === 0) {
         const c = centreOf(bossBox(b));
         const dx = you.x - c.x;
         const dy = you.y - c.y;
@@ -163,8 +166,8 @@ const BEHAVIOUR = {
         for (const spread of [-0.4, 0, 0.4]) {
           const cos = Math.cos(spread);
           const sin = Math.sin(spread);
-          const ux = (dx / mag) * 26;
-          const uy = (dy / mag) * 26;
+          const ux = (dx / mag) * 20;
+          const uy = (dy / mag) * 20;
           ctx.spawn(makeNote(c.x, c.y, Math.round(ux * cos - uy * sin), Math.round(ux * sin + uy * cos)));
         }
         ctx.sound('shot');
@@ -173,18 +176,22 @@ const BEHAVIOUR = {
     }
 
     if (b.phase === 2) {
-      // Withdrawn to the island. The only way across is two tiles of nothing.
+      // Withdrawn into the island corner and pinned there. The only ways in are
+      // two tiles of nothing to the east and two more to the south, and it does
+      // not follow her along the ledge - so there is somewhere to stand once
+      // she is across.
       b.z = 0;
-      b.x = 1 * TILE * SUB;
-      const targetY = clamp(you.y - (BOSS_H / 2) * SUB, 1 * TILE * SUB, ((ROOM_H - 1) * TILE - BOSS_H) * SUB);
-      b.y += Math.sign(targetY - b.y) * 3;
-      if (b.timer % 120 === 0) {
-        ctx.spawnEnemy(makeEnemy({ type: 'mothkin', x: 6, y: 1 + (b.timer / 120) % 5 }));
+      b.x += Math.sign(1 * TILE * SUB - b.x) * 6;
+      b.y += Math.sign(1 * TILE * SUB - b.y) * 6;
+      // One at a time, no more. A hovering escort she cannot reach from the
+      // ground while pinned on a ledge is a way to lose without being outplayed.
+      if (b.timer % 300 === 0 && ctx.livingEnemies() < 1) {
+        ctx.spawnEnemy(makeEnemy({ type: 'mothkin', x: 7, y: 5 }));
         ctx.sound('roar');
       }
-      if (b.timer % 60 === 30) {
+      if (b.timer % 120 === 45) {
         const c = centreOf(bossBox(b));
-        ctx.spawn(makeNote(c.x, c.y, 26, 0));
+        ctx.spawn(makeNote(c.x, c.y, 20, 0));
       }
       return;
     }
@@ -221,7 +228,7 @@ export function stepBoss(b, ctx) {
 export function hurtBoss(b, amount) {
   const was = b.phase;
   b.hp = Math.max(0, b.hp - amount);
-  b.hurt = 20;
+  b.hurt = BOSS_HURT;
   b.phase = phaseFor(b.type, b.hp);
   if (b.hp <= 0) {
     b.alive = false;

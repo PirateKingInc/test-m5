@@ -29,6 +29,9 @@ import {
   playerBox, enemyBox, swingBox, spinBox, swingZ, zOverlaps, overlaps,
   connects, centreOf,
 } from './combat.js';
+import {
+  makeBoss, stepBoss, bossBox, hurtBoss, bossHitResult, BOSS_STATS,
+} from './bosses.js';
 
 /** Button bits. The hardware has a d-pad and exactly two buttons, plus Start. */
 export const BTN = {
@@ -610,6 +613,7 @@ export class Game {
       rng: this.rng,
       spawn: (h) => this.hazards.push(h),
       spawnEnemy: (e) => this.entities.push(e),
+      livingEnemies: () => this.entities.filter((e) => e.alive).length,
       sound: (name) => this.play(name),
     };
     for (const e of this.entities) stepEnemy(e, ctx);
@@ -782,7 +786,8 @@ export class Game {
       if (h.groundOnly && offGround) continue;
       const c = centreOf(hazardBox(h));
       this.play(SFX.HURT);
-      this.damage(h.kind === 'shockwave' ? 1 : 2, c.x, c.y);
+      // Ranged attacks graze; only bodies and root spikes cost a whole heart.
+      this.damage(h.kind === 'spike' ? 2 : 1, c.x, c.y);
       return;
     }
   }
