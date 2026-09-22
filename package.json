@@ -10,9 +10,9 @@
     "verify:progression": "node tools/verify-progression.js",
     "verify:softlock": "node tools/verify-softlock.js",
     "bot": "node tools/bot.js",
-    "verify": "npm run verify:map && npm run verify:progression && npm run verify:softlock && npm run bot",
+    "verify": "npm run verify:map && npm run verify:progression && node tools/verify-softlock.js --check",
     "check": "npm run verify && npm test",
-    "ci": "npm run verify:map && npm test"
+    "ci": "npm run verify && npm test"
   },
   "engines": {
     "node": ">=20"

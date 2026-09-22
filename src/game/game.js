@@ -542,6 +542,15 @@ export class Game {
       return;
     }
     if (this.portalLock) return;
+    // Some stairs wait on something other than a key.
+    if (portal.needs && !this.progress.bossesBeaten.has(portal.needs)) {
+      this.portalLock = true;
+      this.say([
+        'THE DOOR WILL NOT', 'ANSWER.', '',
+        'NOT WHILE THE MIRE', 'STONE IS STILL', 'DARK.',
+      ]);
+      return;
+    }
     this.play(SFX.PORTAL);
     this.enterRoom(portal.to);
     this.player.x = portal.tx * TILE * SUB + ((TILE - HB_W) / 2) * SUB;

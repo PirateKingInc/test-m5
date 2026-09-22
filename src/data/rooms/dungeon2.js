@@ -135,7 +135,7 @@ export const DUNGEON2 = {
     area: 'aerie',
     grid: [3, 2],
     tiles: [
-      '####..####',
+      '##########',
       '#..#..#..#',
       '#..#..#..#',
       'L........#',
@@ -144,7 +144,7 @@ export const DUNGEON2 = {
       '#........#',
       '##########',
     ],
-    exits: {w: 'd2_organloft', n: 'd2_eastspire'},
+    exits: {w: 'd2_organloft'},
     doors: {w: 'lock'},
     entities: [
       {type: 'heart', x: 7, y: 3, id: 'hc_vestry'},
@@ -206,9 +206,9 @@ export const DUNGEON2 = {
       '.........#',
       '#........#',
       '#........#',
-      '####..####',
+      '##########',
     ],
-    exits: {w: 'd2_galehall', s: 'd2_vestry', n: 'd2_reliquary'},
+    exits: {w: 'd2_galehall', n: 'd2_reliquary'},
     doors: {n: 'lock'},
     entities: [
       {type: 'chest', x: 2, y: 2, id: 'ch_d2_key3', gives: 'smallkey'},

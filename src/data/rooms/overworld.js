@@ -258,11 +258,11 @@ export const OVERWORLD = {
       '.........#',
       '#..V..S..#',
       '#........#',
-      '####..####',
+      '##########',
     ],
-    exits: {w: 'ow_stormstair', s: 'ow_cliffside'},
+    exits: {w: 'ow_stormstair'},
     portals: [
-      {x: 7, y: 1, to: 'd2_foyer', tx: 2, ty: 2},
+      {x: 7, y: 1, to: 'd2_foyer', tx: 2, ty: 2, needs: 'sapwarden'},
     ],
     signs: {
       '6,5': ['THE AERIE', 'RELIQUARY.', 'LISTEN AT THE', 'DOOR. DO NOT', 'ANSWER.'],
@@ -276,7 +276,7 @@ export const OVERWORLD = {
     area: 'overworld',
     grid: [3, 1],
     tiles: [
-      '####..####',
+      '##########',
       '#..#..#JJ#',
       '#..#..#JJ#',
       '.........#',
@@ -285,7 +285,7 @@ export const OVERWORLD = {
       '#..#..#..#',
       '####..####',
     ],
-    exits: {n: 'ow_aeriedoor', w: 'ow_eastfen', s: 'ow_shore'},
+    exits: {w: 'ow_eastfen', s: 'ow_shore'},
     entities: [
       {type: 'heart', x: 8, y: 1, id: 'hc_cliff'},
       {type: 'brumbler', x: 4, y: 4},
