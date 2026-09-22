@@ -3,7 +3,11 @@
 
 import { Game, BTN } from '../../src/game/game.js';
 import { makeEnemy } from '../../src/game/enemies.js';
+import { makeProp } from '../../src/game/props.js';
+import { ROOMS } from '../../src/game/world.js';
 import { TILE, SUB, HB_W, HB_H } from '../../src/game/constants.js';
+
+let roomCounter = 0;
 
 const EMPTY = [
   '##########',
@@ -25,12 +29,28 @@ const EMPTY = [
 export function sandbox(opts = {}) {
   const game = new Game();
   game.newGame();
-  game.room = {
-    id: 'test_room',
+
+  // Register the throwaway room in the world table, because the simulation is
+  // entitled to assume every room it is standing in has data behind it.
+  const id = `test_room_${roomCounter += 1}`;
+  const tiles = opts.tiles ?? EMPTY;
+  ROOMS[id] = {
     name: 'TEST',
-    area: 'overworld',
-    grid: (opts.tiles ?? EMPTY).map((r) => [...r]),
+    area: opts.area ?? 'overworld',
+    grid: [0, 0],
+    tiles,
+    exits: opts.exits ?? {},
+    doors: opts.doors,
+    signs: opts.signs,
+    entities: [],
   };
+  game.room = {
+    id,
+    name: 'TEST',
+    area: opts.area ?? 'overworld',
+    grid: tiles.map((r) => [...r]),
+  };
+  game.props = (opts.props ?? []).map((spec) => makePropSpec(spec));
   game.entities = (opts.entities ?? []).map(makeEnemy);
   game.hazards = [];
   game.pickups = [];
@@ -39,6 +59,11 @@ export function sandbox(opts = {}) {
   // Room entry leaves her briefly invincible in some tests' way; clear it.
   game.player.iframes = 0;
   return game;
+}
+
+function makePropSpec(spec) {
+  // Deferred import avoids a cycle between the helper and the game module graph.
+  return makeProp(spec);
 }
 
 export function placeAt(p, tx, ty) {

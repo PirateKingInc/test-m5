@@ -33,6 +33,8 @@ test('nothing ever writes a fifth colour', () => {
     (g) => { g.newGame(); g.step(BTN.B); g.step(0); },
     (g) => { g.newGame(); g.step(0); g.step(BTN.START); },
     (g) => { g.newGame(); g.player.hp = 0; g.scene = SCENE.GAMEOVER; },
+    (g) => { g.newGame(); g.say(['A LINE', 'ANOTHER LINE', 'A THIRD']); for (let i = 0; i < 40; i += 1) g.step(0); },
+    (g) => { g.newGame(); g.enterRoom('d1_guard'); g.progress.keys.mire = 3; g.progress.bossKeys.mire = true; g.step(0); },
   ]) {
     const { renderer } = renderedGame(setup);
     assert.ok(onlyPaletteIndices(renderer.buf), 'a pixel outside 0..3 was written');

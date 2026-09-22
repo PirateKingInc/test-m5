@@ -10,7 +10,8 @@ import { PALETTE } from '../data/palette.js';
 import { TILES, METATILES, TILE_ART } from '../data/tiles.js';
 import { glyph, CELL_W, CELL_H, GLYPH_W, GLYPH_H } from '../data/font.js';
 import {
-  SUMMER, SWORD, SPIN, MONSTERS, BUCKLER, SEED, NOTE, SHOCKWAVE, ROOT_SPIKE,
+  SUMMER, SWORD, SPIN, MONSTERS, BUCKLER, NPCS, SEED, NOTE, SHOCKWAVE,
+  ROOT_SPIKE, CHEST, HEART_CONTAINER, KEY,
   FULL_HEART, HALF_HEART, EMPTY_HEART,
 } from '../data/sprites.js';
 import {
@@ -18,6 +19,8 @@ import {
   SPRITE_OX, SPRITE_OY, TRANSITION_FRAMES,
 } from '../game/constants.js';
 import { SCENE } from '../game/game.js';
+import { visibleLines, pageComplete } from '../game/dialogue.js';
+import { dungeonOf } from '../game/world.js';
 import { jumpHeight } from '../game/player.js';
 
 const RGBA = PALETTE.map((hex) => [
@@ -231,6 +234,8 @@ export class Renderer {
       this.text(label, x + 4, HUD_H + 9, 0);
     }
 
+    if (game.dialogue) this.drawDialogue(game);
+
     if (game.scene === SCENE.PAUSE) {
       this.fillRect(28, 50, 104, 44, 3);
       this.box(30, 52, 100, 40, 0);
@@ -254,6 +259,17 @@ export class Renderer {
 
   /** Monsters, their projectiles, and anything they dropped. */
   drawRoomContents(game, ox, oy) {
+    for (const prop of game.props) {
+      const x = Math.round(ox + prop.x / SUB);
+      const y = Math.round(oy + prop.y / SUB);
+      if (prop.kind === 'chest') this.sprite(prop.open ? CHEST.open : CHEST.closed, x, y);
+      else if (prop.kind === 'heart') this.sprite(HEART_CONTAINER, x, y);
+      else if (prop.kind === 'npc') {
+        const art = NPCS[prop.sprite] ?? NPCS.mabel;
+        this.sprite(art[Math.floor(prop.anim / 40) % art.length], x, y);
+      }
+    }
+
     for (const q of game.pickups) {
       // Blink out over the last second so a pickup never vanishes unannounced.
       if (q.life < 60 && Math.floor(q.life / 4) % 2 === 0) continue;
@@ -363,6 +379,19 @@ export class Renderer {
     this.sprite(frame, x, y, { flipX: dir === 'right' });
   }
 
+  /** The text box: three lines, revealed a glyph at a time. */
+  drawDialogue(game) {
+    const top = SCREEN_H - 46;
+    this.fillRect(0, top, SCREEN_W, 46, 3);
+    this.box(3, top + 3, SCREEN_W - 6, 40, 0);
+    visibleLines(game.dialogue).forEach((line, i) => {
+      this.text(line, 9, top + 9 + i * 10, 0);
+    });
+    if (pageComplete(game.dialogue) && Math.floor(game.frame / 16) % 2 === 0) {
+      this.sprite(['0000', '.000.', '..0..'], SCREEN_W - 16, top + 34);
+    }
+  }
+
   drawHud(game) {
     this.fillRect(0, 0, SCREEN_W, HUD_H, 3);
     const p = game.player;
@@ -372,6 +401,16 @@ export class Renderer {
       const filled = p.hp - i * 2;
       const art = filled >= 2 ? FULL_HEART : filled === 1 ? HALF_HEART : EMPTY_HEART;
       this.sprite(art, 3 + i * 8, 4, { solid: 0 });
+    }
+
+    // Keys only matter inside a dungeon, so they only show inside one.
+    const dungeon = dungeonOf(game.room.id);
+    if (!dungeon) return;
+    this.sprite(KEY, 120, 4, { solid: 0 });
+    this.text(String(game.progress.keys[dungeon]), 129, 5, 0);
+    if (game.progress.bossKeys[dungeon]) {
+      this.sprite(KEY, 142, 4, { solid: 1 });
+      this.box(140, 2, 12, 12, 0);
     }
   }
 
