@@ -277,8 +277,10 @@ them gone, the ending becomes unreachable.
 | **Spitfen** | ranged | stationary, fires a seed projectile along its facing every 90 frames, turns to face Summer between shots, 2 HP |
 
 All six appear in both dungeons and the overworld. Enemies drop a half-heart
-pickup on death with probability derived from the seeded RNG (no wall-clock
-randomness anywhere).
+pickup on death with probability **0.45**, drawn from the seeded RNG (no
+wall-clock randomness anywhere). That is deliberately generous: every room
+repopulates when it is re-entered, so kills are the only renewable health in
+the game.
 
 ## 8. Bosses
 
@@ -286,7 +288,7 @@ randomness anywhere).
 
 | phase | HP | pattern |
 | --- | --- | --- |
-| 1 | 24→16 | lumbers toward Summer; every 90 frames erupts three telegraphed root spikes at her last position |
+| 1 | 24→16 | lumbers toward Summer; every 130 frames erupts three root spikes across the tile she is standing on and the two beside it, telegraphed for 45 frames - long enough to walk out of, which at one pixel a frame it has to be |
 | 2 | 16→8 | seals itself in a **cracked bark shell**; only a Rootcarver swing (U1) breaks through, everything else clinks off. Fires seed volleys meanwhile |
 | 3 | 8→0 | alternates a straight charge with a **ground shockwave ring** that must be jumped |
 
@@ -313,14 +315,21 @@ Tests U2 (phase 2) and the jump (phases 2 and 3).
 
 ## 9. Systems
 
-* **Health.** Hearts in halves. Touching a monster or a boss costs a whole
-  heart; a ranged attack, a shockwave or a fall costs half; a root spike costs a
-  whole one. 60 invincibility frames with sprite flicker, plus 12 frames of
-  knockback away from the damage source.
+* **Health.** Hearts in halves. Everything costs **half** a heart - touching a
+  monster, a ranged hit, a shockwave, a root spike, a fall - except touching a
+  **boss**, which costs a whole one. Summer starts with three hearts and every room
+  repopulates behind her, so a whole heart per bump turns the first dungeon
+  into a war of attrition rather than a place to explore. 60 invincibility
+  frames with sprite flicker, plus 12 frames of knockback away from the
+  damage source.
 * **Dialogue.** Fixed 160×40 box, 3 lines of 18 characters, one glyph every 2
   frames, A skips to the end of the page and then advances.
-* **Saving.** Autosave on every room entry and on every save point. The save is
-  one JSON blob in `localStorage` under `brackenfall.save.v1`. Title screen
+* **Saving.** Autosave on every room entry and on every save point. A save
+  marker also **restores Summer to full health** - without that the only
+  renewable health in the game is a coin-flip on a kill, and a bad run has no
+  way back. There is one in Cinderhome, the Crossroads, Bell Hill and the Aerie
+  Gate, and one in each dungeon: the Crossvault and the Long Bridge. The save
+  is one JSON blob in `localStorage` under `brackenfall.save.v1`. Title screen
   offers **Continue** (only when a save exists) and **New Game**.
 * **Determinism.** Fixed 60 Hz timestep with an accumulator; all randomness runs
   through a seeded mulberry32 stream stored in the game state; game logic never

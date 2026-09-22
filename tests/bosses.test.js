@@ -90,17 +90,17 @@ test('the Chorister phase two puts two tiles of nothing between you and it', () 
   g.player.iframes = 1e6;
   run(g, 200, 0);
   assert.equal(g.boss.phase, 2);
-  // It withdraws into the island corner: columns 1-3, rows 1-2.
+  // It withdraws into the island corner: columns 1-3, rows 1-3.
   assert.equal(Math.floor(g.boss.x / SUB / TILE), 1, 'it withdraws to the island');
   assert.equal(Math.floor(g.boss.y / SUB / TILE), 1);
   // Two tiles of nothing to the east of the island, and two to the south.
   for (const col of [4, 5]) assert.equal(g.room.grid[1][col], 'P');
-  for (const row of [3, 4]) assert.equal(g.room.grid[row][2], 'P');
+  for (const row of [4, 5]) assert.equal(g.room.grid[row][2], 'P');
 
   // Swinging from the near lip cannot possibly reach across either gap.
   placeAt(g.player, 6, 1);
   assert.equal(swing(g, 'left'), 0, 'no swing crosses the eastern gap');
-  placeAt(g.player, 2, 5);
+  placeAt(g.player, 2, 6);
   assert.equal(swing(g, 'up'), 0, 'nor the southern one');
 });
 

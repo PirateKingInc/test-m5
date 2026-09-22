@@ -24,6 +24,19 @@ function walkable(ch) {
 }
 
 /**
+ * Chests and people stand on floor tiles and stop her just as a wall does -
+ * and a chest stays put after it has been opened. Leaving them out of the
+ * model means a route that walks straight through the Rootcarver's chest,
+ * which is a wall in the actual game.
+ */
+const BLOCKED_BY_PROP = new Set(
+  Object.entries(ROOMS).flatMap(([room, data]) =>
+    (data.entities ?? [])
+      .filter((e) => e.type === 'chest' || e.type === 'npc')
+      .map((e) => key(room, e.x, e.y))),
+);
+
+/**
  * Every tile reachable from a starting tile, given what Summer is carrying and
  * which doors are already open.
  *
@@ -33,7 +46,9 @@ function walkable(ch) {
  * @returns {Set<string>} keys of the form "room:x,y"
  */
 export function buildGraph(caps, openedDoors) {
-  const maxJump = caps.sandals ? 2 : 1;
+  // How far a jump carries, in tiles. It is a fixed distance, not a choice:
+  // she travels three tiles with the Gale Sandals and two without.
+  const jumpTiles = caps.sandals ? 3 : 2;
   const grids = new Map();
   const gridOf = (room) => {
     if (!grids.has(room)) grids.set(room, materialize(room, openedDoors));
@@ -58,6 +73,7 @@ export function buildGraph(caps, openedDoors) {
         const standable = walkable(here) || here === LEDGE;
         if (!standable) continue;
         const from = key(room, x, y);
+        if (BLOCKED_BY_PROP.has(from)) continue;
         const onLedge = here === LEDGE;
 
         for (const [dir, [dx, dy]] of Object.entries(DIRS)) {
@@ -82,32 +98,36 @@ export function buildGraph(caps, openedDoors) {
           const target = at(room, nx, ny);
 
           if (walkable(target)) {
+            const to = key(room, nx, ny);
+            if (!BLOCKED_BY_PROP.has(to)) add(from, to);
+            continue;
+          }
+
+          // Along a raised ledge, once she is up on one. Getting up there is a
+          // jump, handled below: a ledge is solid to a Summer with her feet on
+          // the ground, whatever she is wearing.
+          if (target === LEDGE && onLedge) {
             add(from, key(room, nx, ny));
-            continue;
           }
+        }
 
-          // Onto a raised ledge: needs the Gale Sandals, or already being up there.
-          if (target === LEDGE) {
-            if (caps.sandals || onLedge) add(from, key(room, nx, ny));
-            continue;
+        // Jumps. A jump is a fixed distance and it is only ever stopped short
+        // by something solid, because pits and ledges are both air to a Summer
+        // with her feet up. Where she comes down is the whole of the rule: a
+        // pit is a fall, a ledge is a foothold, and a wall in the way is a
+        // shorter hop that still counts - which is exactly how the heart on
+        // the Windcut Cliffs is got, by vaulting at the cliff wall and landing
+        // on the ledge the wall stops her over.
+        for (const [, [dx, dy]] of Object.entries(DIRS)) {
+          let landing = null;
+          for (let k = 1; k <= jumpTiles; k += 1) {
+            const ch = at(room, x + dx * k, y + dy * k);
+            if (ch === null || (!walkable(ch) && ch !== PIT && ch !== LEDGE)) break;
+            landing = { x: x + dx * k, y: y + dy * k, ch };
           }
-
-          // Over a run of pit tiles, as far as this jump carries.
-          if (target === PIT) {
-            for (let k = 1; k <= maxJump; k += 1) {
-              let clear = true;
-              for (let i = 1; i <= k; i += 1) {
-                if (at(room, x + dx * i, y + dy * i) !== PIT) clear = false;
-              }
-              if (!clear) break;
-              const lx = x + dx * (k + 1);
-              const ly = y + dy * (k + 1);
-              if (lx < 0 || ly < 0 || lx >= ROOM_W || ly >= ROOM_H) continue;
-              const landing = at(room, lx, ly);
-              if (walkable(landing)) add(from, key(room, lx, ly));
-              else if (landing === LEDGE && caps.sandals) add(from, key(room, lx, ly));
-            }
-          }
+          if (!landing || landing.ch === PIT) continue;
+          const to = key(room, landing.x, landing.y);
+          if (to !== from && !BLOCKED_BY_PROP.has(to)) add(from, to);
         }
 
         // Stairs between the overworld and a dungeon. Some wait on a lit stone.

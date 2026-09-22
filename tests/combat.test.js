@@ -6,7 +6,7 @@ import { swingBox, playerBox, overlaps, connects } from '../src/game/combat.js';
 import {
   SUB, TILE, SWING_REACH, IFRAMES, CHARGE_FRAMES,
 } from '../src/game/constants.js';
-import { makeShockwave, maybeDrop, STATS } from '../src/game/enemies.js';
+import { makeShockwave, maybeDrop, STATS, BRUMBLER_WINDUP, DROP_CHANCE } from '../src/game/enemies.js';
 import { makeRng } from '../src/game/rng.js';
 import { WORLD_SEED } from '../src/game/constants.js';
 
@@ -136,10 +136,16 @@ test('a Brumbler charges only when Summer lines up with it, and stuns on a wall'
   const g = sandbox({ at: [8, 4], entities: [{ type: 'brumbler', x: 2, y: 4 }] });
   const e = g.entities[0];
   run(g, 4, 0);
-  assert.equal(e.state, 'charging', 'sharing a row should trigger the charge');
+  assert.equal(e.state, 'winding', 'sharing a row should start the wind-up');
   assert.equal(e.dir, 'right');
+  const wound = e.x;
+  run(g, BRUMBLER_WINDUP - 8, 0);
+  assert.equal(e.state, 'winding', 'the wind-up lasts long enough to react to');
+  assert.equal(e.x, wound, 'and it stays put for all of it');
   const x0 = e.x;
-  run(g, 60, 0);
+  run(g, 8, 0);
+  assert.equal(e.state, 'charging', 'then it goes');
+  run(g, 80, 0);
   assert.ok(e.x > x0, 'it should have travelled');
   assert.equal(e.state, 'stunned', 'and be recovering after hitting something');
 });
@@ -172,13 +178,13 @@ test('a Snag wanders, and wanders the same way for the same seed', () => {
   assert.notDeepEqual({ x: g.entities[0].x, y: g.entities[0].y }, start, 'it should actually move');
 });
 
-test('half-heart drops come from the seeded stream at about a third', () => {
+test('half-heart drops come from the seeded stream at the documented rate', () => {
   const rng = makeRng(WORLD_SEED);
   const fake = { x: 0, y: 0 };
   let drops = 0;
   for (let i = 0; i < 400; i += 1) if (maybeDrop(fake, rng)) drops += 1;
   const rate = drops / 400;
-  assert.ok(rate > 0.25 && rate < 0.45, `drop rate ${rate} is not roughly one in three`);
+  assert.ok(Math.abs(rate - DROP_CHANCE) < 0.08, `drop rate ${rate} is not close to ${DROP_CHANCE}`);
 });
 
 test('the same seed drops the same hearts in the same places', () => {

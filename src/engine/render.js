@@ -349,7 +349,9 @@ export class Renderer {
       if (!art) continue;
       const x = Math.round(ox + e.x / SUB - 2);
       const y = Math.round(oy + e.y / SUB - 4 - (e.z ?? 0));
-      this.sprite(art[Math.floor(e.anim / 10) % 2], x, y);
+      // A winding Brumbler shudders in place, so the charge can be read.
+      const shake = e.state === 'winding' ? (Math.floor(e.anim / 2) % 2 ? 1 : -1) : 0;
+      this.sprite(art[Math.floor(e.anim / 10) % 2], x + shake, y);
       if (e.shielded) {
         const side = e.dir === 'left' || e.dir === 'right';
         const shield = side ? BUCKLER.side : e.dir === 'up' ? BUCKLER.up : BUCKLER.down;

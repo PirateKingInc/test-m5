@@ -19,6 +19,9 @@ export const STATS = {
   spitfen: { hp: 2, speed: 0, flying: false },
 };
 
+/** Frames a Brumbler spends visibly winding up before it launches. */
+export const BRUMBLER_WINDUP = 26;
+
 export const DIRS = ['up', 'down', 'left', 'right'];
 export const VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 
@@ -104,6 +107,13 @@ const BEHAVIOUR = {
       if (e.timer <= 0) e.state = 'idle';
       return;
     }
+    // Paws the ground before it goes. A charge at twice walking speed with no
+    // tell is not a monster, it is a dice roll.
+    if (e.state === 'winding') {
+      e.timer -= 1;
+      if (e.timer <= 0) e.state = 'charging';
+      return;
+    }
     if (e.state === 'charging') {
       const [vx, vy] = VEC[e.dir];
       if (!move(e, ctx.grid, vx * 34, vy * 34)) {
@@ -116,10 +126,12 @@ const BEHAVIOUR = {
     const aligned = Math.abs(dy) < 8 * SUB ? 'x' : Math.abs(dx) < 8 * SUB ? 'y' : null;
     if (aligned === 'x') {
       e.dir = dx < 0 ? 'left' : 'right';
-      e.state = 'charging';
+      e.state = 'winding';
+      e.timer = BRUMBLER_WINDUP;
     } else if (aligned === 'y') {
       e.dir = dy < 0 ? 'up' : 'down';
-      e.state = 'charging';
+      e.state = 'winding';
+      e.timer = BRUMBLER_WINDUP;
     } else {
       e.timer -= 1;
       if (e.timer <= 0) {
@@ -222,11 +234,21 @@ export function makeShockwave(x, y, dir) {
   };
 }
 
+/**
+ * A telegraphed root spike.
+ *
+ * The warning is long on purpose. The Sap-Warden plants three of these across
+ * the tile Summer is standing on and the two beside it, so escaping means
+ * covering most of two tiles - about 30 pixels - and she walks at one pixel a
+ * frame. A 30-frame tell made the attack unavoidable rather than hard.
+ */
+export const SPIKE_WARN = 45;
+
 export function makeSpike(tx, ty) {
   return {
     kind: 'spike',
     x: tx * TILE * SUB, y: ty * TILE * SUB,
-    vx: 0, vy: 0, z: 0, life: 70, warn: 30, groundOnly: false, anim: 0,
+    vx: 0, vy: 0, z: 0, life: SPIKE_WARN + 40, warn: SPIKE_WARN, groundOnly: false, anim: 0,
   };
 }
 
@@ -252,9 +274,17 @@ export function hazardBox(h) {
   return { x: h.x, y: h.y, w: size * SUB, h: size * SUB };
 }
 
-/** Half-heart pickups. Enemies drop them through the seeded stream, never the clock. */
+/** How often a kill gives a half-heart back. */
+export const DROP_CHANCE = 0.45;
+
+/**
+ * Half-heart pickups. Enemies drop them through the seeded stream, never the
+ * clock. The rate is deliberately generous: every room repopulates when it is
+ * re-entered, so kills are the only renewable health in the game and a stingy
+ * rate turns a three-heart start into a war of attrition.
+ */
 export function maybeDrop(e, rng) {
-  if (!chance(rng, 0.34)) return null;
+  if (!chance(rng, DROP_CHANCE)) return null;
   return {
     kind: 'halfheart',
     x: e.x, y: e.y, life: 420,
