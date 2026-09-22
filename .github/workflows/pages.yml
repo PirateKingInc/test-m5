@@ -34,9 +34,15 @@ jobs:
           cp -r src _site/
           cp README.md _site/ 2>/dev/null || true
 
-      # Turn Pages on if it is not already. Without this the very first
-      # deploy of a fresh repository fails on "Get Pages site failed", which
-      # is a repository-settings problem wearing the costume of a build failure.
+      # Pages has to exist before anything can publish to it, and this cannot
+      # create it: the REST call behind `enablement` needs `administration:
+      # write`, which is not one of the scopes GITHUB_TOKEN can be granted, so
+      # on a repository that has never had Pages turned on it fails with
+      # "Resource not accessible by integration". Someone with admin rights
+      # sets Settings -> Pages -> Source to "GitHub Actions" once, by hand, and
+      # every deploy after that is automatic. `enablement` is left on because
+      # on a repository where the token *does* have the rights it saves that
+      # trip - it costs nothing where it does not.
       - uses: actions/configure-pages@v5
         with:
           enablement: true
