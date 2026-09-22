@@ -233,6 +233,11 @@ export class Renderer {
   drawWorld(game) {
     this.clear(1);
 
+    // Screen shake. The offset is a pure function of the frame counter, so a
+    // recorded input stream still draws the same picture on replay - and it
+    // moves the world only, never the HUD, because a heart display that will
+    // not sit still is unreadable exactly when it matters most.
+    const [sx, sy] = Renderer.shakeOffset(game);
     if (game.transition) {
       const t = game.transition.t / TRANSITION_FRAMES;
       const [dx, dy] = { n: [0, -1], s: [0, 1], w: [-1, 0], e: [1, 0] }[game.transition.dir];
@@ -245,10 +250,17 @@ export class Renderer {
       this.drawRoomContents(game, inX, HUD_H + inY);
       this.drawPlayer(game, inX, HUD_H + inY);
     } else {
-      this.drawGrid(game.room.grid, 0, HUD_H);
-      this.drawRoomContents(game, 0, HUD_H);
-      this.drawPlayer(game, 0, HUD_H);
-      this.drawBlade(game, 0, HUD_H);
+      this.drawGrid(game.room.grid, sx, HUD_H + sy);
+      this.drawRoomContents(game, sx, HUD_H + sy);
+      this.drawPlayer(game, sx, HUD_H + sy);
+      this.drawBlade(game, sx, HUD_H + sy);
+    }
+
+    // A flash, for the two moments big enough to earn one: a heart container
+    // and a Wick-Stone relit. Strobing on alternate frames rather than holding
+    // - four colours give no room for a fade, so the alternation is the fade.
+    if (game.flash > 0 && Math.floor(game.frame / 2) % 2 === 0) {
+      this.fillRect(0, HUD_H, SCREEN_W, SCREEN_H - HUD_H, 0);
     }
 
     this.drawHud(game);
@@ -269,6 +281,20 @@ export class Renderer {
       this.centeredText('PAUSED', 60, 0);
       this.centeredText('START TO RESUME', 76, 0);
     }
+  }
+
+  /**
+   * How far to shove the world this frame, in pixels.
+   *
+   * Two coprime multipliers against the frame counter, so the horizontal and
+   * vertical components come back into step every six frames rather than every
+   * two - which is the difference between a rattle and a wobble.
+   */
+  static shakeOffset(game) {
+    if (!game.shake) return [0, 0];
+    const m = game.shakeMag;
+    return [((game.frame * 7) % 3) - 1, ((game.frame * 5) % 2 === 0 ? 1 : -1)]
+      .map((v, i) => Math.round(v * m * (i === 0 ? 1 : 0.7)));
   }
 
   /** @param {string[][]} grid */
@@ -447,8 +473,12 @@ export class Renderer {
     const p = game.player;
     if (!p) return;
     const max = game.progress.maxHp;
+    // One heart left is the only number a player needs read off a glance, so
+    // the last one blinks. Everything above that just sits there.
+    const critical = p.hp > 0 && p.hp <= 2 && Math.floor(game.frame / 12) % 2 === 0;
     for (let i = 0; i < max / 2; i += 1) {
       const filled = p.hp - i * 2;
+      if (critical && i === 0) continue;
       const art = filled >= 2 ? FULL_HEART : filled === 1 ? HALF_HEART : EMPTY_HEART;
       this.sprite(art, 3 + i * 8, 4, { solid: 0 });
     }

@@ -34,7 +34,12 @@ jobs:
           cp -r src _site/
           cp README.md _site/ 2>/dev/null || true
 
+      # Turn Pages on if it is not already. Without this the very first
+      # deploy of a fresh repository fails on "Get Pages site failed", which
+      # is a repository-settings problem wearing the costume of a build failure.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:

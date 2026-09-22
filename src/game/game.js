@@ -110,6 +110,15 @@ export class Game {
     this.prevButtons = 0;
     /** Drained by the audio engine every frame. */
     this.sounds = [];
+    /**
+     * Screen shake, in frames, with a magnitude in pixels. Presentation only:
+     * nothing reads it back, it is not saved, and it is a pure function of the
+     * frame counter - so a recorded input stream still replays exactly.
+     */
+    this.shake = 0;
+    this.shakeMag = 0;
+    /** Frames of full-screen flash left. Presentation only, like the shake. */
+    this.flash = 0;
 
     this.scene = SCENE.TITLE;
     this.menuIndex = this.hasSave ? 0 : 1;
@@ -147,6 +156,13 @@ export class Game {
   pressed(bit) { return (this.buttons & bit) !== 0 && (this.prevButtons & bit) === 0; }
 
   play(sfx) { this.sounds.push(sfx); }
+
+  /** Rattles the screen. The louder of two overlapping jolts wins. */
+  jolt(frames, mag) {
+    if (mag < this.shakeMag && this.shake > 0) return;
+    this.shake = Math.max(this.shake, frames);
+    this.shakeMag = mag;
+  }
 
   // --- lifecycle ------------------------------------------------------------
 
@@ -251,6 +267,8 @@ export class Game {
     this.buttons = buttons;
     this.frame += 1;
     this.sounds.length = 0;
+    if (this.shake > 0) this.shake -= 1;
+    if (this.flash > 0) this.flash -= 1;
     this.saveRequested = false;
 
     switch (this.scene) {
@@ -630,7 +648,11 @@ export class Game {
       spawn: (h) => this.hazards.push(h),
       spawnEnemy: (e) => this.entities.push(e),
       livingEnemies: () => this.entities.filter((e) => e.alive).length,
-      sound: (name) => this.play(name),
+      sound: (name) => {
+        this.play(name);
+        // A stomp that does not move the floor is not a stomp.
+        if (name === SFX.STOMP) this.jolt(14, 2);
+      },
     };
     for (const e of this.entities) stepEnemy(e, ctx);
     if (this.boss) stepBoss(this.boss, ctx);
@@ -695,7 +717,7 @@ export class Game {
     }
     const phased = hurtBoss(b, spinning ? power + 1 : power);
     if (!b.alive) this.defeatBoss(b);
-    else if (phased) this.play(SFX.ROAR);
+    else if (phased) { this.play(SFX.ROAR); this.jolt(22, 2); }
     else this.play(SFX.HIT);
   }
 
@@ -705,6 +727,8 @@ export class Game {
     this.entities = [];
     this.play(SFX.BOSSDOWN);
     this.play(SFX.WICKSTONE);
+    this.jolt(48, 3);
+    this.flash = 12;
     this.saveRequested = true;
 
     if (b.type === 'sapwarden') {
@@ -732,6 +756,7 @@ export class Game {
       if (this.room.grid[ty + dy]?.[tx + dx] !== 'W') continue;
       this.progress.pillars.add(this.room.id);
       this.play(SFX.PILLAR);
+      this.jolt(26, 2);
       return;
     }
   }
@@ -823,6 +848,7 @@ export class Game {
       this.progress.maxHp = Math.min(MAX_HEARTS * HEART, this.progress.maxHp + HEART);
       this.player.hp = this.progress.maxHp;
       this.play(SFX.CONTAINER);
+      this.flash = 8;
       this.say(['A HEART CONTAINER.', 'YOU CAN TAKE ONE', 'MORE HIT NOW.']);
       return;
     }
@@ -888,6 +914,7 @@ export class Game {
     if (p.iframes > 0) return false;
     p.hp = Math.max(0, p.hp - halves);
     p.iframes = IFRAMES;
+    this.jolt(halves > 1 ? 10 : 5, halves > 1 ? 2 : 1);
     if (!noKnock) {
       // Measured centre to centre: using her top-left corner would push her the
       // wrong way whenever the source sat between her corner and her middle.
