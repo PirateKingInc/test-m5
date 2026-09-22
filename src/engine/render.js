@@ -1,0 +1,323 @@
+// Everything that puts pixels on screen. This module reads game state and
+// never writes it.
+//
+// Drawing goes into an index buffer of palette entries 0..3, one byte per
+// pixel, which is then expanded to RGBA once per frame. That is a little
+// roundabout, and it is deliberate: it makes it structurally impossible to
+// write a fifth colour.
+
+import { PALETTE } from '../data/palette.js';
+import { TILES, METATILES, TILE_ART } from '../data/tiles.js';
+import { glyph, CELL_W, CELL_H, GLYPH_W, GLYPH_H } from '../data/font.js';
+import { SUMMER } from '../data/sprites.js';
+import { FULL_HEART, HALF_HEART, EMPTY_HEART } from '../data/sprites.js';
+import {
+  SCREEN_W, SCREEN_H, HUD_H, VIEW_W, VIEW_H, TILE, SUB, HB_W, HB_H,
+  SPRITE_OX, SPRITE_OY, TRANSITION_FRAMES,
+} from '../game/constants.js';
+import { SCENE } from '../game/game.js';
+import { jumpHeight } from '../game/player.js';
+
+const RGBA = PALETTE.map((hex) => [
+  parseInt(hex.slice(1, 3), 16),
+  parseInt(hex.slice(3, 5), 16),
+  parseInt(hex.slice(5, 7), 16),
+  255,
+]);
+
+export class Renderer {
+  /** @param {HTMLCanvasElement} canvas the visible, upscaled canvas */
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d', { alpha: false });
+    this.ctx.imageSmoothingEnabled = false;
+
+    this.buf = new Uint8Array(SCREEN_W * SCREEN_H);
+
+    this.small = document.createElement('canvas');
+    this.small.width = SCREEN_W;
+    this.small.height = SCREEN_H;
+    this.smallCtx = this.small.getContext('2d', { alpha: false });
+    this.image = this.smallCtx.createImageData(SCREEN_W, SCREEN_H);
+  }
+
+  // --- primitives -----------------------------------------------------------
+
+  clear(colour = 0) {
+    this.buf.fill(colour);
+  }
+
+  px(x, y, colour) {
+    if (x < 0 || y < 0 || x >= SCREEN_W || y >= SCREEN_H) return;
+    this.buf[y * SCREEN_W + x] = colour;
+  }
+
+  fillRect(x, y, w, h, colour) {
+    const x0 = Math.max(0, x);
+    const y0 = Math.max(0, y);
+    const x1 = Math.min(SCREEN_W, x + w);
+    const y1 = Math.min(SCREEN_H, y + h);
+    for (let py = y0; py < y1; py += 1) {
+      this.buf.fill(colour, py * SCREEN_W + x0, py * SCREEN_W + x1);
+    }
+  }
+
+  /** Draws one 8x8 tile from the tile table. */
+  tile(id, x, y) {
+    const rows = TILES[id];
+    for (let ry = 0; ry < 8; ry += 1) {
+      const py = y + ry;
+      if (py < 0 || py >= SCREEN_H) continue;
+      const row = rows[ry];
+      for (let rx = 0; rx < 8; rx += 1) {
+        this.px(x + rx, py, row.charCodeAt(rx) - 48);
+      }
+    }
+  }
+
+  /** Draws a 16x16 metatile as its four 8x8 quadrants. */
+  metatile(name, x, y) {
+    const ids = METATILES[name];
+    if (!ids) return;
+    this.tile(ids[0], x, y);
+    this.tile(ids[1], x + 8, y);
+    this.tile(ids[2], x, y + 8);
+    this.tile(ids[3], x + 8, y + 8);
+  }
+
+  /**
+   * Draws a transparent sprite.
+   * @param {string[]} rows pixel strings, '.' transparent
+   * @param {{flipX?: boolean, solid?: number}} [opts] `solid` paints every lit
+   *   pixel one colour, which is how the damage flash works.
+   */
+  sprite(rows, x, y, opts = {}) {
+    const h = rows.length;
+    const w = rows[0].length;
+    for (let ry = 0; ry < h; ry += 1) {
+      const py = y + ry;
+      if (py < 0 || py >= SCREEN_H) continue;
+      const row = rows[ry];
+      for (let rx = 0; rx < w; rx += 1) {
+        const ch = row[opts.flipX ? w - 1 - rx : rx];
+        if (ch === '.') continue;
+        this.px(x + rx, py, opts.solid ?? ch.charCodeAt(0) - 48);
+      }
+    }
+  }
+
+  /** Draws text in the 5x7 font. Returns the x it ended at. */
+  text(str, x, y, colour = 3) {
+    let cx = x;
+    for (const ch of str) {
+      const g = glyph(ch);
+      for (let ry = 0; ry < GLYPH_H; ry += 1) {
+        for (let rx = 0; rx < GLYPH_W; rx += 1) {
+          if (g[ry][rx] === '#') this.px(cx + rx, y + ry, colour);
+        }
+      }
+      cx += CELL_W;
+    }
+    return cx;
+  }
+
+  textWidth(str) {
+    return str.length * CELL_W - 1;
+  }
+
+  centeredText(str, y, colour = 3) {
+    this.text(str, Math.round((SCREEN_W - this.textWidth(str)) / 2), y, colour);
+  }
+
+  /** Text at 2x, for the title. */
+  bigText(str, x, y, colour = 3) {
+    let cx = x;
+    for (const ch of str) {
+      const g = glyph(ch);
+      for (let ry = 0; ry < GLYPH_H; ry += 1) {
+        for (let rx = 0; rx < GLYPH_W; rx += 1) {
+          if (g[ry][rx] !== '#') continue;
+          this.fillRect(cx + rx * 2, y + ry * 2, 2, 2, colour);
+        }
+      }
+      cx += CELL_W * 2;
+    }
+  }
+
+  centeredBigText(str, y, colour = 3) {
+    this.bigText(str, Math.round((SCREEN_W - (str.length * CELL_W * 2 - 2)) / 2), y, colour);
+  }
+
+  /** A one-pixel box outline. */
+  box(x, y, w, h, colour = 3) {
+    this.fillRect(x, y, w, 1, colour);
+    this.fillRect(x, y + h - 1, w, 1, colour);
+    this.fillRect(x, y, 1, h, colour);
+    this.fillRect(x + w - 1, y, 1, h, colour);
+  }
+
+  // --- scenes ---------------------------------------------------------------
+
+  /** @param {import('../game/game.js').Game} game */
+  draw(game) {
+    switch (game.scene) {
+      case SCENE.TITLE: this.drawTitle(game); break;
+      case SCENE.GAMEOVER: this.drawGameOver(game); break;
+      default: this.drawWorld(game); break;
+    }
+    this.present();
+  }
+
+  drawTitle(game) {
+    this.clear(0);
+    this.fillRect(0, 0, SCREEN_W, 52, 2);
+    this.centeredBigText('BRACKENFALL', 14, 0);
+    this.centeredText('THE LONG HUSH', 36, 0);
+
+    // Summer stands under her own title, breathing.
+    const frame = SUMMER.down[Math.floor(game.titleT / 30) % 2];
+    this.sprite(frame, SCREEN_W / 2 - 8, 62);
+
+    const options = game.titleOptions();
+    options.forEach((opt, i) => {
+      const y = 96 + i * 14;
+      const colour = opt.enabled ? 3 : 1;
+      this.centeredText(opt.label, y, colour);
+      if (i === game.menuIndex && Math.floor(game.titleT / 16) % 2 === 0) {
+        const w = this.textWidth(opt.label);
+        this.text('>', Math.round((SCREEN_W - w) / 2) - 8, y, 3);
+      }
+    });
+    this.centeredText('A / ENTER TO START', 130, 1);
+  }
+
+  drawGameOver() {
+    this.clear(3);
+    this.centeredBigText('THE HUSH', 44, 0);
+    this.centeredBigText('TAKES YOU', 66, 0);
+    this.centeredText('PRESS START', 108, 1);
+  }
+
+  drawWorld(game) {
+    this.clear(1);
+
+    if (game.transition) {
+      const t = game.transition.t / TRANSITION_FRAMES;
+      const [dx, dy] = { n: [0, -1], s: [0, 1], w: [-1, 0], e: [1, 0] }[game.transition.dir];
+      const outX = Math.round(-dx * VIEW_W * t);
+      const outY = Math.round(-dy * VIEW_H * t);
+      this.drawGrid(game.transition.from.grid, outX, HUD_H + outY);
+      const inX = outX + dx * VIEW_W;
+      const inY = outY + dy * VIEW_H;
+      this.drawGrid(game.room.grid, inX, HUD_H + inY);
+      this.drawPlayer(game, inX, HUD_H + inY);
+    } else {
+      this.drawGrid(game.room.grid, 0, HUD_H);
+      this.drawPlayer(game, 0, HUD_H);
+    }
+
+    this.drawHud(game);
+
+    if (game.banner > 0 && !game.transition) {
+      const label = game.room.name;
+      const w = this.textWidth(label) + 8;
+      const x = Math.round((SCREEN_W - w) / 2);
+      this.fillRect(x, HUD_H + 6, w, 13, 3);
+      this.text(label, x + 4, HUD_H + 9, 0);
+    }
+
+    if (game.scene === SCENE.PAUSE) {
+      this.fillRect(28, 50, 104, 44, 3);
+      this.box(30, 52, 100, 40, 0);
+      this.centeredText('PAUSED', 60, 0);
+      this.centeredText('START TO RESUME', 76, 0);
+    }
+  }
+
+  /** @param {string[][]} grid */
+  drawGrid(grid, ox, oy) {
+    for (let y = 0; y < grid.length; y += 1) {
+      const py = oy + y * TILE;
+      if (py <= -TILE || py >= SCREEN_H) continue;
+      for (let x = 0; x < grid[y].length; x += 1) {
+        const px = ox + x * TILE;
+        if (px <= -TILE || px >= SCREEN_W) continue;
+        this.metatile(TILE_ART[grid[y][x]], px, py);
+      }
+    }
+  }
+
+  drawPlayer(game, ox, oy) {
+    const p = game.player;
+    if (!p) return;
+    if (p.falling > 0) {
+      // Shrink into the hole rather than just vanishing.
+      const t = 1 - p.falling / 24;
+      const size = Math.max(2, Math.round(16 * (1 - t)));
+      const x = Math.round(ox + p.x / SUB + SPRITE_OX + (16 - size) / 2);
+      const y = Math.round(oy + p.y / SUB + SPRITE_OY + (16 - size) / 2);
+      this.fillRect(x, y, size, size, 2);
+      return;
+    }
+    if (p.iframes > 0 && Math.floor(game.frame / 3) % 2 === 0) return;
+
+    const facingSide = p.dir === 'left' || p.dir === 'right';
+    const pose = facingSide ? SUMMER.side : p.dir === 'up' ? SUMMER.up : SUMMER.down;
+    const frame = p.moving ? pose[Math.floor(p.anim / 8) % pose.length] : pose[0];
+    const lift = jumpHeight(p);
+
+    const x = Math.round(ox + p.x / SUB + SPRITE_OX);
+    const y = Math.round(oy + p.y / SUB + SPRITE_OY - lift);
+
+    if (lift > 0) {
+      // A shadow sells the height; without it a jump reads as a glide.
+      this.sprite(
+        ['..####..', '.######.', '..####..'],
+        Math.round(ox + p.x / SUB + (HB_W - 8) / 2),
+        Math.round(oy + p.y / SUB + HB_H - 3),
+        { solid: 2 },
+      );
+    }
+    this.sprite(frame, x, y, { flipX: p.dir === 'right' });
+  }
+
+  drawHud(game) {
+    this.fillRect(0, 0, SCREEN_W, HUD_H, 3);
+    const p = game.player;
+    if (!p) return;
+    const max = game.progress.maxHp;
+    for (let i = 0; i < max / 2; i += 1) {
+      const filled = p.hp - i * 2;
+      const art = filled >= 2 ? FULL_HEART : filled === 1 ? HALF_HEART : EMPTY_HEART;
+      this.sprite(art, 3 + i * 8, 4, { solid: 0 });
+    }
+  }
+
+  // --- output ---------------------------------------------------------------
+
+  present() {
+    const data = this.image.data;
+    for (let i = 0; i < this.buf.length; i += 1) {
+      const c = RGBA[this.buf[i]];
+      const o = i * 4;
+      data[o] = c[0];
+      data[o + 1] = c[1];
+      data[o + 2] = c[2];
+      data[o + 3] = 255;
+    }
+    this.smallCtx.putImageData(this.image, 0, 0);
+    this.ctx.imageSmoothingEnabled = false;
+    this.ctx.drawImage(this.small, 0, 0, this.canvas.width, this.canvas.height);
+  }
+
+  /** Sizes the visible canvas to the largest whole-number multiple that fits. */
+  fit(availW, availH) {
+    const scale = Math.max(1, Math.floor(Math.min(availW / SCREEN_W, availH / SCREEN_H)));
+    this.canvas.width = SCREEN_W * scale;
+    this.canvas.height = SCREEN_H * scale;
+    this.canvas.style.width = `${SCREEN_W * scale}px`;
+    this.canvas.style.height = `${SCREEN_H * scale}px`;
+    this.ctx.imageSmoothingEnabled = false;
+    return scale;
+  }
+}

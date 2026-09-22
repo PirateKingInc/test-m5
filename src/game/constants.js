@@ -28,8 +28,11 @@ export const SPRITE_OY = -6;
 // Movement
 export const WALK_SPEED = 16;          // subpixels per frame on the ground (1 px)
 export const AIR_SPEED = 24;           // subpixels per frame while airborne (1.5 px)
-export const BASE_AIRTIME = 26;        // frames aloft without the Gale Sandals
-export const SANDAL_AIRTIME = 36;      // frames aloft with them
+// Summer falls when the tile under her CENTRE is a pit, so crossing a pit W
+// tiles wide means moving her centre from just before it to just past it:
+// 16W + 1 pixels. 1 tile needs 17 px, 2 tiles need 33, 3 tiles need 49.
+export const BASE_AIRTIME = 20;        // 30.0 px of travel: clears 1, fails 2
+export const SANDAL_AIRTIME = 31;      // 46.5 px of travel: clears 2, fails 3
 export const JUMP_APEX = 10;           // pixels of visual lift at the top of an arc
 
 // Combat

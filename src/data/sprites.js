@@ -1100,3 +1100,26 @@ export const NPCS = {
     ),
   ],
 };
+
+// HUD hearts. Halves matter: all damage is counted in half-hearts.
+export const FULL_HEART = S(
+  '.33.33..',
+  '3003003.',
+  '3000003.',
+  '3000003.',
+  '.300003.',
+  '..3003..',
+  '...30...',
+  '........',
+);
+
+export const EMPTY_HEART = S(
+  '.33.33..',
+  '3..3..3.',
+  '3.....3.',
+  '3.....3.',
+  '.3...3..',
+  '..3.3...',
+  '...3....',
+  '........',
+);
