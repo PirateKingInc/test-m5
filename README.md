@@ -2,6 +2,13 @@
 
 **▶ Play it: https://piratekinginc.github.io/test-m5/**
 
+> **The first deploy needs one switch flipped by hand.** GitHub Pages has to be
+> turned on before a workflow can publish to it, and a workflow cannot turn it
+> on for you: creating a Pages site needs `administration: write`, which is not
+> one of the scopes `GITHUB_TOKEN` can be granted. Go to **Settings → Pages**
+> and set **Source** to **GitHub Actions**, then re-run the *Deploy to GitHub
+> Pages* workflow. Every deploy after that is automatic on merge to `main`.
+
 An original top-down action-adventure in the idiom of an early-90s handheld
 dungeon crawler. 160×144, four colours, 8×8 tiles, a d-pad and two buttons.
 No engine, no framework, no dependencies, no asset files — every sprite is
