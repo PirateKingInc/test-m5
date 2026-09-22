@@ -29,6 +29,9 @@ import {
   playerBox, enemyBox, swingBox, spinBox, swingZ, zOverlaps, overlaps,
   connects, centreOf,
 } from './combat.js';
+import {
+  makeBoss, stepBoss, bossBox, hurtBoss, bossHitResult, BOSS_STATS,
+} from './bosses.js';
 
 /** Button bits. The hardware has a d-pad and exactly two buttons, plus Start. */
 export const BTN = {
@@ -46,6 +49,27 @@ export const SCENE = {
   CREDITS: 'credits',
 };
 
+/** The closing crawl. Everything here was written for this game. */
+export const CREDITS = [
+  'BRACKENFALL',
+  'THE LONG HUSH',
+  '',
+  'DESIGN AND CODE',
+  'WRITING',
+  'PIXELS',
+  'MUSIC',
+  '',
+  'WITH THANKS TO',
+  'EVERYONE WHO KEPT',
+  'LISTENING',
+  '',
+  'SUMMER WILL',
+  'RING THE BELL',
+  'HERSELF',
+  '',
+  'THE END',
+];
+
 /** Sound events the audio engine drains each frame. Game logic never plays anything. */
 export const SFX = {
   JUMP: 'jump', LAND: 'land', FALL: 'fall', MENU: 'menu', CONFIRM: 'confirm',
@@ -53,7 +77,7 @@ export const SFX = {
   KILL: 'kill', HURT: 'hurt', SHOT: 'shot', STOMP: 'stomp', HEART: 'heart',
   CHARGED: 'charged', BLIP: 'blip', CHEST: 'chest', KEY: 'key', LOCKED: 'locked',
   SHATTER: 'shatter', SAVE: 'save', PILLAR: 'pillar', CONTAINER: 'container',
-  PORTAL: 'portal',
+  PORTAL: 'portal', ROAR: 'roar', BOSSDOWN: 'bossdown', WICKSTONE: 'wickstone',
 };
 
 /** Entity types in room data that are monsters rather than scenery. */
@@ -101,7 +125,13 @@ export class Game {
     this.hazards = [];
     this.pickups = [];
     this.props = [];
+    this.boss = null;
     this.dialogue = null;
+    /** Where to put her once the current text box closes, if anywhere. */
+    this.pendingWarp = null;
+    /** Which scene to enter once the current text box closes, if any. */
+    this.pendingScene = null;
+    this.creditsT = 0;
     /** Suppresses a portal until she steps off the stair she arrived on. */
     this.portalLock = false;
     /** Set when a room is entered, so the host can autosave. */
@@ -193,6 +223,10 @@ export class Game {
       .filter((spec) => !(spec.type === 'chest' && this.progress.chests.has(spec.id)))
       .filter((spec) => !(spec.type === 'heart' && this.progress.heartsTaken.has(spec.id)))
       .map(makeProp);
+    const bossSpec = (data.entities ?? []).find((e) => e.type === 'boss');
+    this.boss = bossSpec && !this.progress.bossesBeaten.has(bossSpec.kind)
+      ? makeBoss(bossSpec)
+      : null;
     this.hazards = [];
     this.pickups = [];
     this.portalLock = true;
@@ -225,6 +259,9 @@ export class Game {
       case SCENE.TRANSITION: this.stepTransition(); break;
       case SCENE.PAUSE: this.stepPause(); break;
       case SCENE.DIALOGUE: this.stepDialogue(); break;
+      case SCENE.ENDING: this.stepEnding(); break;
+      case SCENE.CREDITS: this.stepCredits(); break;
+      case SCENE.GAMEOVER: this.stepGameOver(); break;
       default: break;
     }
     return this;
@@ -320,6 +357,17 @@ export class Game {
       if (advanceDialogue(this.dialogue) === 'close') {
         this.dialogue = null;
         this.scene = SCENE.PLAY;
+        if (this.pendingWarp) {
+          const [room, tx, ty] = this.pendingWarp;
+          this.pendingWarp = null;
+          this.enterRoom(room);
+          this.placePlayer(tx, ty);
+        }
+        if (this.pendingScene) {
+          this.scene = this.pendingScene;
+          this.pendingScene = null;
+          this.creditsT = 0;
+        }
       }
     }
   }
@@ -549,14 +597,27 @@ export class Game {
     return this.player.spin > 0;
   }
 
+  placePlayer(tx, ty) {
+    const p = this.player;
+    p.x = tx * TILE * SUB + ((TILE - HB_W) / 2) * SUB;
+    p.y = ty * TILE * SUB + ((TILE - HB_H) / 2) * SUB;
+    p.safeX = p.x;
+    p.safeY = p.y;
+    p.air = 0;
+  }
+
   stepEntities() {
     const ctx = {
       grid: this.room.grid,
       player: this.player,
       rng: this.rng,
       spawn: (h) => this.hazards.push(h),
+      spawnEnemy: (e) => this.entities.push(e),
+      livingEnemies: () => this.entities.filter((e) => e.alive).length,
+      sound: (name) => this.play(name),
     };
     for (const e of this.entities) stepEnemy(e, ctx);
+    if (this.boss) stepBoss(this.boss, ctx);
     for (const q of this.props) q.anim += 1;
     this.hazards = this.hazards.filter((h) => stepHazard(h, this.room.grid));
     this.pickups = this.pickups.filter((q) => (q.life -= 1) > 0);
@@ -596,6 +657,55 @@ export class Game {
     this.entities = this.entities.filter((e) => e.alive || e.hurt > 0);
 
     if (spinning) this.wakePillar();
+    if (this.boss) this.strikeBoss(area, dir, zr, power, spinning);
+  }
+
+  /**
+   * The blade against a boss. The three answers - it lands, it rings off the
+   * shell, it passes underneath - are exactly the three things the phases are
+   * built to ask for.
+   */
+  strikeBoss(area, dir, zr, power, spinning) {
+    const b = this.boss;
+    if (!b.alive || b.hurt > 0 || b.intro > 0) return;
+    if (!overlaps(area, bossBox(b))) return;
+    if (!zOverlaps(zr, b.z)) return;
+
+    const verdict = bossHitResult(b, this.progress.upgrades, aloft(this.player));
+    if (verdict !== 'hit') {
+      b.hurt = 10;
+      this.play(SFX.CLINK);
+      return;
+    }
+    const phased = hurtBoss(b, spinning ? power + 1 : power);
+    if (!b.alive) this.defeatBoss(b);
+    else if (phased) this.play(SFX.ROAR);
+    else this.play(SFX.HIT);
+  }
+
+  defeatBoss(b) {
+    this.progress.bossesBeaten.add(b.type);
+    this.hazards = [];
+    this.entities = [];
+    this.play(SFX.BOSSDOWN);
+    this.play(SFX.WICKSTONE);
+    this.saveRequested = true;
+
+    if (b.type === 'sapwarden') {
+      this.pendingWarp = ['d1_entry', 4, 3];
+      this.say([
+        'THE ROOTS LET GO.', '', 'WICK-STONE ONE',
+        'CATCHES, AND HOLDS.', '',
+        'ONE MORE, SUMMER.', 'THE CLIFF ONE.', 'THE LOUD ONE.',
+      ]);
+      return;
+    }
+    this.pendingScene = SCENE.ENDING;
+    this.say([
+      'THE SINGING STOPS.', '', 'WICK-STONE TWO',
+      'CATCHES, AND HOLDS.', '',
+      'FAR BELOW, IN', 'CINDERHOME, A BELL', 'STARTS UP AGAIN.',
+    ]);
   }
 
   /** A charged spin is the only thing that turns a whorl pillar. */
@@ -607,6 +717,33 @@ export class Game {
       this.progress.pillars.add(this.room.id);
       this.play(SFX.PILLAR);
       return;
+    }
+  }
+
+  stepEnding() {
+    this.creditsT += 1;
+    if (this.creditsT > 200 && (this.pressed(BTN.A) || this.pressed(BTN.START))) {
+      this.scene = SCENE.CREDITS;
+      this.creditsT = 0;
+    }
+  }
+
+  stepCredits() {
+    this.creditsT += 1;
+    const done = this.creditsT > CREDITS.length * 30 + 200;
+    if (done || (this.creditsT > 120 && this.pressed(BTN.START))) {
+      this.hasSave = true;
+      this.scene = SCENE.TITLE;
+      this.titleT = 0;
+      this.menuIndex = 0;
+    }
+  }
+
+  stepGameOver() {
+    if (this.pressed(BTN.START) || this.pressed(BTN.A)) {
+      this.scene = SCENE.TITLE;
+      this.titleT = 0;
+      this.menuIndex = this.hasSave ? 0 : 1;
     }
   }
 
@@ -631,6 +768,17 @@ export class Game {
       return;
     }
 
+    const b = this.boss;
+    if (b && b.alive && b.intro <= 0 && overlaps(pb, bossBox(b))) {
+      // A hovering Chorister only touches her when she is up there with it.
+      if (!(b.z > 0 && !offGround)) {
+        const c = centreOf(bossBox(b));
+        this.play(SFX.HURT);
+        this.damage(2, c.x, c.y);
+        return;
+      }
+    }
+
     for (const h of this.hazards) {
       if (h.warn > 0) continue;
       if (!overlaps(pb, hazardBox(h))) continue;
@@ -638,7 +786,8 @@ export class Game {
       if (h.groundOnly && offGround) continue;
       const c = centreOf(hazardBox(h));
       this.play(SFX.HURT);
-      this.damage(h.kind === 'shockwave' ? 1 : 2, c.x, c.y);
+      // Ranged attacks graze; only bodies and root spikes cost a whole heart.
+      this.damage(h.kind === 'spike' ? 2 : 1, c.x, c.y);
       return;
     }
   }
@@ -752,6 +901,8 @@ export class Game {
       airborne: this.player ? isAirborne(this.player) : false,
       keys: { ...this.progress.keys },
       bossKeys: { ...this.progress.bossKeys },
+      boss: this.boss ? { type: this.boss.type, hp: this.boss.hp, phase: this.boss.phase } : null,
+      bossesBeaten: [...this.progress.bossesBeaten].sort(),
       upgrades: { ...this.progress.upgrades },
       doors: this.progress.openedDoors.size,
       chests: this.progress.chests.size,

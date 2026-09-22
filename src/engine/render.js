@@ -11,14 +11,14 @@ import { TILES, METATILES, TILE_ART } from '../data/tiles.js';
 import { glyph, CELL_W, CELL_H, GLYPH_W, GLYPH_H } from '../data/font.js';
 import {
   SUMMER, SWORD, SPIN, MONSTERS, BUCKLER, NPCS, SEED, NOTE, SHOCKWAVE,
-  ROOT_SPIKE, CHEST, HEART_CONTAINER, KEY,
+  ROOT_SPIKE, CHEST, HEART_CONTAINER, KEY, BOSSES, WICKSTONE,
   FULL_HEART, HALF_HEART, EMPTY_HEART,
 } from '../data/sprites.js';
 import {
   SCREEN_W, SCREEN_H, HUD_H, VIEW_W, VIEW_H, TILE, SUB, HB_W, HB_H,
   SPRITE_OX, SPRITE_OY, TRANSITION_FRAMES,
 } from '../game/constants.js';
-import { SCENE } from '../game/game.js';
+import { SCENE, CREDITS } from '../game/game.js';
 import { visibleLines, pageComplete } from '../game/dialogue.js';
 import { dungeonOf } from '../game/world.js';
 import { jumpHeight } from '../game/player.js';
@@ -168,6 +168,8 @@ export class Renderer {
     switch (game.scene) {
       case SCENE.TITLE: this.drawTitle(game); break;
       case SCENE.GAMEOVER: this.drawGameOver(game); break;
+      case SCENE.ENDING: this.drawEnding(game); break;
+      case SCENE.CREDITS: this.drawCredits(game); break;
       default: this.drawWorld(game); break;
     }
     this.present();
@@ -201,6 +203,31 @@ export class Renderer {
     this.centeredBigText('THE HUSH', 44, 0);
     this.centeredBigText('TAKES YOU', 66, 0);
     this.centeredText('PRESS START', 108, 1);
+  }
+
+  drawEnding(game) {
+    this.clear(3);
+    const t = game.creditsT;
+    // The two stones catch, one after the other.
+    this.sprite(WICKSTONE, 48, 40, { solid: t > 30 ? 0 : 2 });
+    this.sprite(WICKSTONE, 96, 40, { solid: t > 90 ? 0 : 2 });
+    this.centeredText('BOTH STONES LIT', 70, 0);
+    this.centeredBigText('THE HUSH', 86, 0);
+    this.centeredBigText('LIFTS', 104, 0);
+    if (t > 200 && Math.floor(t / 20) % 2 === 0) this.centeredText('PRESS A', 130, 1);
+  }
+
+  drawCredits(game) {
+    this.clear(3);
+    const top = SCREEN_H - Math.floor(game.creditsT / 2);
+    CREDITS.forEach((line, i) => {
+      const y = top + i * 14;
+      if (y < -10 || y > SCREEN_H) return;
+      this.centeredText(line, y, 0);
+    });
+    if (game.creditsT > 120 && Math.floor(game.creditsT / 24) % 2 === 0) {
+      this.centeredText('START', SCREEN_H - 10, 1);
+    }
   }
 
   drawWorld(game) {
@@ -290,6 +317,27 @@ export class Renderer {
           this.sprite(ROOT_SPIKE, x, y);
         }
       }
+    }
+
+    const boss = game.boss;
+    if (boss && boss.alive) {
+      const art = BOSSES[boss.type];
+      const bx = Math.round(ox + boss.x / SUB);
+      const by = Math.round(oy + boss.y / SUB - boss.z);
+      const flicker = boss.hurt > 0 && Math.floor(game.frame / 2) % 2 === 0;
+      if (boss.z > 0) {
+        this.sprite(
+          ['..########..', '.##########.', '..########..'],
+          bx + 10, Math.round(oy + boss.y / SUB + 28), { solid: 2 },
+        );
+      }
+      if (!flicker) {
+        this.sprite(art[Math.floor(boss.anim / 14) % 2], bx, by, {
+          solid: boss.intro > 0 && Math.floor(game.frame / 4) % 2 === 0 ? 3 : undefined,
+        });
+      }
+      // The bark shell reads as a box you have to break, not a colour swap.
+      if (boss.shell) this.box(bx + 1, by + 1, 30, 30, 3);
     }
 
     // Back to front, so a monster lower on screen overlaps one above it.
@@ -401,6 +449,17 @@ export class Renderer {
       const filled = p.hp - i * 2;
       const art = filled >= 2 ? FULL_HEART : filled === 1 ? HALF_HEART : EMPTY_HEART;
       this.sprite(art, 3 + i * 8, 4, { solid: 0 });
+    }
+
+    const boss = game.boss;
+    if (boss && boss.alive) {
+      // A boss bar, drawn in the same band, because there is nowhere else.
+      const w = 52;
+      const x = SCREEN_W - w - 4;
+      this.box(x, 4, w, 7, 0);
+      const fill = Math.round(((w - 4) * boss.hp) / boss.maxHp);
+      this.fillRect(x + 2, 6, fill, 3, boss.shell ? 1 : 0);
+      return;
     }
 
     // Keys only matter inside a dungeon, so they only show inside one.

@@ -269,23 +269,30 @@ randomness anywhere).
 
 ## 8. Bosses
 
-### Boss 1 — The Sap-Warden (`d1_boss`, 12 HP)
+### Boss 1 — The Sap-Warden (`d1_boss`, 24 HP)
 
 | phase | HP | pattern |
 | --- | --- | --- |
-| 1 | 12→9 | lumbers toward Summer; every 90 frames erupts three telegraphed root spikes at her last position |
-| 2 | 9→5 | seals itself in a **cracked bark shell**; only a Rootcarver swing (U1) breaks through, everything else clinks off. Fires seed volleys meanwhile |
-| 3 | 5→0 | alternates a straight charge with a **ground shockwave ring** that must be jumped |
+| 1 | 24→16 | lumbers toward Summer; every 90 frames erupts three telegraphed root spikes at her last position |
+| 2 | 16→8 | seals itself in a **cracked bark shell**; only a Rootcarver swing (U1) breaks through, everything else clinks off. Fires seed volleys meanwhile |
+| 3 | 8→0 | alternates a straight charge with a **ground shockwave ring** that must be jumped |
 
 Tests U1 (phase 2) and the jump (phase 3).
 
-### Boss 2 — The Hollow Chorister (`d2_boss`, 16 HP)
+### Boss 2 — The Hollow Chorister (`d2_boss`, 24 HP)
+
+The arena is an L: a three-by-two **island** in the north-west corner, two tiles
+of chasm east of it and two more south of it, and open floor everywhere else.
+Both ways onto the island are two-tile jumps.
 
 | phase | HP | pattern |
 | --- | --- | --- |
-| 1 | 16→12 | drifts and fires three-note spreads |
-| 2 | 12→6 | retreats to a central island ringed by a **2-tile chasm**; reachable only with the Gale Sandals. Summons Mothkins |
-| 3 | 6→0 | hovers at height 8 (jump-attack only) and lays down shockwaves |
+| 1 | 24→18 | drifts on the open floor and fires three-note spreads |
+| 2 | 18→10 | withdraws into the island corner and pins itself there; the only ways in are the two 2-tile gaps, so it cannot be fought without the Gale Sandals. Summons one Mothkin at a time |
+| 3 | 10→0 | hovers at height 8 (airborne swings only) and lays down shockwaves |
+
+A boss flashes for 24 frames after each hit, so neither fight can be won by
+standing in it and holding A.
 
 Tests U2 (phase 2) and the jump (phases 2 and 3).
 
@@ -293,9 +300,10 @@ Tests U2 (phase 2) and the jump (phases 2 and 3).
 
 ## 9. Systems
 
-* **Health.** Hearts in halves. Contact damage costs 1 heart (half from a
-  shockwave or a fall). 60 invincibility frames with sprite flicker, plus 12
-  frames of knockback away from the damage source.
+* **Health.** Hearts in halves. Touching a monster or a boss costs a whole
+  heart; a ranged attack, a shockwave or a fall costs half; a root spike costs a
+  whole one. 60 invincibility frames with sprite flicker, plus 12 frames of
+  knockback away from the damage source.
 * **Dialogue.** Fixed 160×40 box, 3 lines of 18 characters, one glyph every 2
   frames, A skips to the end of the page and then advances.
 * **Saving.** Autosave on every room entry and on every save point. The save is

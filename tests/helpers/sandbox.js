@@ -66,11 +66,16 @@ function makePropSpec(spec) {
   return makeProp(spec);
 }
 
+/** Teleports Summer onto a tile, ready to act: not mid-jump, not mid-fall. */
 export function placeAt(p, tx, ty) {
   p.x = tx * TILE * SUB + ((TILE - HB_W) / 2) * SUB;
   p.y = ty * TILE * SUB + ((TILE - HB_H) / 2) * SUB;
   p.safeX = p.x;
   p.safeY = p.y;
+  p.air = 0;
+  p.aloft = false;
+  p.falling = 0;
+  p.knock = 0;
 }
 
 /** Runs n frames with the given buttons held. */
