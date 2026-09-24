@@ -28,7 +28,7 @@ jobs:
         run: npm run ci
 
   pwa:
-    name: PWA (service worker, offline, install)
+    name: PWA (manifest, service worker, offline, install, Lighthouse)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -38,14 +38,37 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Validate manifest.json and the generated icons
+        run: node tools/verify-manifest.js && node tools/make-icons.js --check
+
+      - name: Service worker precache list and cache version are current
+        run: node tools/sw-manifest.js --check
+
       # Test tooling only. --no-save keeps package.json free of dependencies,
-      # and nothing here ships to the site.
+      # and nothing here ships to the site. Lighthouse 11 is the last release
+      # with the PWA category.
       - name: Install browser test tooling
-        run: npm i --no-save --no-package-lock playwright-core@1.56.1
+        run: npm i --no-save --no-package-lock playwright-core@1.56.1 lighthouse@11.7.1
 
       # xvfb: the save-persistence test opens the game as a real standalone
       # app window, which needs a headed browser.
-      - name: Service worker, offline play, update and install banners, saves in standalone
+      - name: Service worker registers and precaches; offline play; update and install banners; saves in standalone
         run: xvfb-run -a npm run test:browser
         env:
           CHROME_CHANNEL: chrome
+
+      - name: Lighthouse PWA audit (fails unless installable)
+        run: |
+          node tools/serve.js --port=8000 &
+          for i in $(seq 1 20); do curl -fsS -o /dev/null http://127.0.0.1:8000/test-m5/ && break; sleep 0.5; done
+          CHROME_PATH="$(command -v google-chrome)" npx lighthouse http://127.0.0.1:8000/test-m5/ \
+            --only-categories=pwa --output=json --output=html --output-path=./lighthouse \
+            --chrome-flags="--headless=new --no-sandbox" --quiet
+          node tools/check-lighthouse.js lighthouse.report.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-pwa
+          path: lighthouse.report.*
+          if-no-files-found: ignore
