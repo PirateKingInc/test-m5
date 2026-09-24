@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { skip as noBrowser, site, untilGame, hold, root } from './helpers.js';
+import { skip as noBrowser, site, untilGame, untilControlled, hold, root } from './helpers.js';
 
 const { chromium } = noBrowser ? {} : await import('playwright-core');
 const skip = noBrowser || (!process.env.DISPLAY && !process.env.CI && 'needs a display for a headed app window (run under xvfb-run)');
@@ -21,12 +21,25 @@ const launchProfile = (profile, args = []) => chromium.launchPersistentContext(p
 });
 
 const SAVE_KEY = 'brackenfall.save.v1';
+const log = (...a) => console.log('[standalone]', ...a);
+
+/** The app window: whichever page of the context reaches the game's URL. */
+async function findPage(context, url) {
+  const deadline = Date.now() + 20000;
+  while (Date.now() < deadline) {
+    const hit = context.pages().find((p) => p.url().startsWith(url));
+    if (hit) return hit;
+    await new Promise((ok) => setTimeout(ok, 200));
+  }
+  throw new Error(`no window reached ${url}; pages: ${context.pages().map((p) => p.url()).join(', ')}`);
+}
 
 test('a save made in the browser is continued in the installed app', { skip }, async () => {
   const profile = mkdtempSync(join(tmpdir(), 'brackenfall-profile-'));
   const s = await site();
   try {
     // 1. An ordinary browser tab: play until the game autosaves in a new room.
+    log('launching browser tab');
     const tab = await launchProfile(profile);
     const page = tab.pages()[0] ?? await tab.newPage();
     await page.goto(s.url);
@@ -41,12 +54,14 @@ test('a save made in the browser is continued in the installed app', { skip }, a
     assert.ok(saved, 'the browser tab autosaved');
     const blob = JSON.parse(saved);
     assert.equal(blob.room, 'ow_southmire');
-    await page.evaluate(() => navigator.serviceWorker.ready);
+    await untilControlled(page);
     await tab.close();
+    log('tab closed; save', saved.length, 'bytes; launching app window');
 
     // 2. The installed app: same profile, its own standalone window.
     const app = await launchProfile(profile, [`--app=${s.url}`]);
-    const win = app.pages().find((p) => p.url().startsWith(s.url)) ?? await app.waitForEvent('page');
+    const win = await findPage(app, s.url);
+    log('app window open', win.url());
     await untilGame(win);
     assert.equal(await win.evaluate(() => matchMedia('(display-mode: standalone)').matches), true, 'really standalone');
     assert.equal(await win.evaluate((k) => localStorage.getItem(k), SAVE_KEY), saved, 'the save is byte-for-byte the same');

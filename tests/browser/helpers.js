@@ -54,11 +54,7 @@ export async function site() {
 
 /** Waits until this page is controlled by an activated worker. */
 export async function untilControlled(page) {
-  await page.evaluate(async () => {
-    await navigator.serviceWorker.ready;
-    if (navigator.serviceWorker.controller) return;
-    await new Promise((ok) => navigator.serviceWorker.addEventListener('controllerchange', ok, { once: true }));
-  });
+  await page.waitForFunction(() => navigator.serviceWorker.controller?.state === 'activated', null, { timeout: 20000 });
 }
 
 /** Waits for the game to have booted. */

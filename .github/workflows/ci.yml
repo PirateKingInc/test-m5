@@ -30,6 +30,7 @@ jobs:
   pwa:
     name: PWA (service worker, offline, install)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
