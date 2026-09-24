@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { skip as noBrowser, site, untilGame, untilControlled, hold, root } from './helpers.js';
+import { skip as noBrowser, site, untilGame, untilControlled, pressUntil, root } from './helpers.js';
 
 const { chromium } = noBrowser ? {} : await import('playwright-core');
 const skip = noBrowser || (!process.env.DISPLAY && !process.env.CI && 'needs a display for a headed app window (run under xvfb-run)');
@@ -22,6 +22,14 @@ const launchProfile = (profile, args = []) => chromium.launchPersistentContext(p
 
 const SAVE_KEY = 'brackenfall.save.v1';
 const log = (...a) => console.log('[standalone]', ...a);
+
+/** Whether the game loop is actually stepping in this window. */
+async function loopRuns(page) {
+  const t0 = await page.evaluate(() => window.brackenfall.game.titleT);
+  await page.waitForTimeout(500);
+  const t1 = await page.evaluate(() => window.brackenfall.game.titleT);
+  return `${t1 - t0} frames in 500 ms`;
+}
 
 /** The app window: whichever page of the context reaches the game's URL. */
 async function findPage(context, url) {
@@ -37,19 +45,19 @@ async function findPage(context, url) {
 test('a save made in the browser is continued in the installed app', { skip }, async () => {
   const profile = mkdtempSync(join(tmpdir(), 'brackenfall-profile-'));
   const s = await site();
+  const open = [];
   try {
     // 1. An ordinary browser tab: play until the game autosaves in a new room.
     log('launching browser tab');
     const tab = await launchProfile(profile);
+    open.push(tab);
     const page = tab.pages()[0] ?? await tab.newPage();
     await page.goto(s.url);
     await untilGame(page);
     assert.equal(await page.evaluate(() => matchMedia('(display-mode: standalone)').matches), false);
-    await hold(page, 'Enter', 120);
-    await page.waitForFunction(() => window.brackenfall.game.scene === 'play');
-    await page.keyboard.down('ArrowRight');
-    await page.waitForFunction(() => window.brackenfall.game.room.id === 'ow_southmire', null, { timeout: 15000 });
-    await page.keyboard.up('ArrowRight');
+    log('loop running:', await loopRuns(page));
+    await pressUntil(page, 'Enter', () => window.brackenfall.game.scene === 'play');
+    await pressUntil(page, 'ArrowRight', () => window.brackenfall.game.room.id === 'ow_southmire', 30000);
     const saved = await page.evaluate((k) => localStorage.getItem(k), SAVE_KEY);
     assert.ok(saved, 'the browser tab autosaved');
     const blob = JSON.parse(saved);
@@ -60,6 +68,7 @@ test('a save made in the browser is continued in the installed app', { skip }, a
 
     // 2. The installed app: same profile, its own standalone window.
     const app = await launchProfile(profile, [`--app=${s.url}`]);
+    open.push(app);
     const win = await findPage(app, s.url);
     log('app window open', win.url());
     await untilGame(win);
@@ -70,8 +79,7 @@ test('a save made in the browser is continued in the installed app', { skip }, a
     // 3. And the game reads it: Continue is offered, first, and lands on the save.
     const title = await win.evaluate(() => [window.brackenfall.game.hasSave, window.brackenfall.game.menuIndex]);
     assert.deepEqual(title, [true, 0], 'CONTINUE is offered and selected');
-    await hold(win, 'Enter', 120);
-    await win.waitForFunction(() => window.brackenfall.game.scene === 'play');
+    await pressUntil(win, 'Enter', () => window.brackenfall.game.scene === 'play');
     const resumed = await win.evaluate(() => {
       const g = window.brackenfall.game;
       return { room: g.room.id, x: g.player.x, y: g.player.y, hp: g.player.hp };
@@ -79,6 +87,7 @@ test('a save made in the browser is continued in the installed app', { skip }, a
     assert.deepEqual(resumed, { room: blob.room, x: blob.x, y: blob.y, hp: blob.hp });
     await app.close();
   } finally {
+    for (const c of open) await c.close().catch(() => {});
     await s.stop();
     rmSync(profile, { recursive: true, force: true });
   }

@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { skip, launch, site, untilControlled, untilGame, hold, root } from './helpers.js';
+import { skip, launch, site, untilControlled, untilGame, hold, pressUntil, root } from './helpers.js';
 
 const precacheList = () => {
   const sw = readFileSync(join(root, 'sw.js'), 'utf8');
@@ -69,8 +69,7 @@ test('after one visit the game loads and plays with no network at all', { skip }
     assert.equal(await offline.evaluate(() => navigator.onLine), false);
 
     // Start a new game and walk. It is a real, running game, not a cached shell.
-    await hold(offline, 'Enter', 120);
-    await offline.waitForFunction(() => window.brackenfall.game.scene === 'play');
+    await pressUntil(offline, 'Enter', () => window.brackenfall.game.scene === 'play');
     const x0 = await offline.evaluate(() => window.brackenfall.game.player.x);
     await hold(offline, 'ArrowRight', 600);
     const x1 = await offline.evaluate(() => window.brackenfall.game.player.x);
@@ -106,8 +105,7 @@ test('with service workers unavailable the game is still an ordinary page', { sk
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(s.url);
     await untilGame(page);
-    await hold(page, 'Enter', 120);
-    await page.waitForFunction(() => window.brackenfall.game.scene === 'play');
+    await pressUntil(page, 'Enter', () => window.brackenfall.game.scene === 'play');
     assert.deepEqual(errors, []);
   } finally {
     await browser.close();

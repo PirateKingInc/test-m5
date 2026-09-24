@@ -68,3 +68,16 @@ export async function hold(page, key, ms) {
   await page.waitForTimeout(ms);
   await page.keyboard.up(key);
 }
+
+/**
+ * Holds a key until the game has reacted to it. Robust to a slow or throttled
+ * animation loop, where a fixed-length tap could fall between two frames.
+ */
+export async function pressUntil(page, key, predicate, timeout = 20000) {
+  await page.keyboard.down(key);
+  try {
+    await page.waitForFunction(predicate, null, { timeout });
+  } finally {
+    await page.keyboard.up(key);
+  }
+}
