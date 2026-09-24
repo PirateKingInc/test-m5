@@ -107,6 +107,32 @@
   @media (hover: hover) and (pointer: fine) {
     #controls { display: none; }
   }
+  /* The installable-app banners (src/pwa.js). Drawn over the page, never in
+     the layout, so the canvas never resizes when one comes or goes. */
+  .banner {
+    position: fixed;
+    top: calc(8px + env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 16px);
+    max-width: 420px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--ink);
+    color: var(--light);
+    border: 2px solid var(--mid);
+    border-radius: 8px;
+    font-size: 11px;
+    line-height: 1.5;
+    touch-action: manipulation;
+  }
+  .banner[hidden] { display: none; }
+  .banner .msg { flex: 1; }
+  .banner .btn { height: 26px; padding: 0 10px; font-size: 11px; border-radius: 13px; flex: none; }
+  .banner .btn.plain { background: transparent; border-color: var(--dark); }
 </style>
 </head>
 <body>
@@ -133,6 +159,11 @@
   </p>
   <button id="mute" class="btn" type="button" aria-pressed="false">&#9834; SOUND ON</button>
 </main>
+<div id="pwa-update" class="banner" role="status" hidden>
+  <span class="msg">A NEW VERSION IS READY.</span>
+  <button class="btn" type="button" data-pwa="reload">RELOAD</button>
+  <button class="btn plain" type="button" data-pwa="later">LATER</button>
+</div>
 <script type="module" src="./src/main.js"></script>
 <script type="module" src="./src/pwa.js"></script>
 </body>

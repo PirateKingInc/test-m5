@@ -21,6 +21,9 @@ try {
 } catch {
   chromium = null;
 }
+// Skipping is a convenience for a laptop without the tooling. In CI a missing
+// browser is a failure, never a quiet skip.
+if (!chromium && process.env.CI) throw new Error('playwright-core is required in CI');
 export const skip = chromium ? false : 'playwright-core is not installed (npm i --no-save playwright-core)';
 
 export function launch() {
