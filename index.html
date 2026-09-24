@@ -129,7 +129,7 @@
     line-height: 1.5;
     touch-action: manipulation;
   }
-  .banner[hidden] { display: none; }
+  .banner[hidden], .banner [hidden] { display: none; }
   .banner .msg { flex: 1; }
   .banner .btn { height: 26px; padding: 0 10px; font-size: 11px; border-radius: 13px; flex: none; }
   .banner .btn.plain { background: transparent; border-color: var(--dark); }
@@ -159,6 +159,11 @@
   </p>
   <button id="mute" class="btn" type="button" aria-pressed="false">&#9834; SOUND ON</button>
 </main>
+<div id="pwa-install" class="banner" role="region" aria-label="Install" hidden>
+  <span class="msg" data-pwa="message">INSTALL BRACKENFALL TO PLAY FULL SCREEN, EVEN OFFLINE.</span>
+  <button class="btn" type="button" data-pwa="install">INSTALL</button>
+  <button class="btn plain" type="button" data-pwa="dismiss" aria-label="Dismiss">&#10005;</button>
+</div>
 <div id="pwa-update" class="banner" role="status" hidden>
   <span class="msg">A NEW VERSION IS READY.</span>
   <button class="btn" type="button" data-pwa="reload">RELOAD</button>

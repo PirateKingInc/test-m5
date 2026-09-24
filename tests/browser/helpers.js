@@ -54,11 +54,7 @@ export async function site() {
 
 /** Waits until this page is controlled by an activated worker. */
 export async function untilControlled(page) {
-  await page.evaluate(async () => {
-    await navigator.serviceWorker.ready;
-    if (navigator.serviceWorker.controller) return;
-    await new Promise((ok) => navigator.serviceWorker.addEventListener('controllerchange', ok, { once: true }));
-  });
+  await page.waitForFunction(() => navigator.serviceWorker.controller?.state === 'activated', null, { timeout: 20000 });
 }
 
 /** Waits for the game to have booted. */
@@ -71,4 +67,17 @@ export async function hold(page, key, ms) {
   await page.keyboard.down(key);
   await page.waitForTimeout(ms);
   await page.keyboard.up(key);
+}
+
+/**
+ * Holds a key until the game has reacted to it. Robust to a slow or throttled
+ * animation loop, where a fixed-length tap could fall between two frames.
+ */
+export async function pressUntil(page, key, predicate, timeout = 20000) {
+  await page.keyboard.down(key);
+  try {
+    await page.waitForFunction(predicate, null, { timeout });
+  } finally {
+    await page.keyboard.up(key);
+  }
 }
