@@ -30,8 +30,8 @@ jobs:
       - name: Stage the static site
         run: |
           mkdir -p _site
-          cp index.html _site/
-          cp -r src _site/
+          cp index.html manifest.json _site/
+          cp -r src icons _site/
           cp README.md _site/ 2>/dev/null || true
 
       # Pages has to exist before anything can publish to it, and this cannot

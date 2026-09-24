@@ -9,8 +9,10 @@
     "verify:map": "node tools/verify-map.js",
     "verify:progression": "node tools/verify-progression.js",
     "verify:softlock": "node tools/verify-softlock.js",
+    "verify:manifest": "node tools/verify-manifest.js && node tools/make-icons.js --check",
+    "icons": "node tools/make-icons.js",
     "bot": "node tools/bot.js",
-    "verify": "npm run verify:map && npm run verify:progression && node tools/verify-softlock.js --check",
+    "verify": "npm run verify:map && npm run verify:progression && node tools/verify-softlock.js --check && npm run verify:manifest",
     "check": "npm run verify && npm test && npm run bot",
     "ci": "npm run verify && npm test && npm run bot"
   },
