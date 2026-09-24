@@ -30,7 +30,7 @@ jobs:
       - name: Stage the static site
         run: |
           mkdir -p _site
-          cp index.html manifest.json _site/
+          cp index.html manifest.json sw.js _site/
           cp -r src icons _site/
           cp README.md _site/ 2>/dev/null || true
 

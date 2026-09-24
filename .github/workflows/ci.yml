@@ -26,3 +26,23 @@ jobs:
 
       - name: Tests and verification
         run: npm run ci
+
+  pwa:
+    name: PWA (service worker, offline, install)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Test tooling only. --no-save keeps package.json free of dependencies,
+      # and nothing here ships to the site.
+      - name: Install browser test tooling
+        run: npm i --no-save --no-package-lock playwright-core@1.56.1
+
+      - name: Service worker registers, precaches, and the game plays offline
+        run: npm run test:browser
+        env:
+          CHROME_CHANNEL: chrome
