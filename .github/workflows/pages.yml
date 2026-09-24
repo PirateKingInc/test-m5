@@ -54,9 +54,54 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # A deploy is not done until the site answers. Poll the live URL until it
+  # serves this commit's service worker, check every PWA file is there, and
+  # audit the live site for installability.
+  verify-live:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Poll the live URL until it returns 200 with this deploy
+        env:
+          URL: ${{ needs.deploy.outputs.page_url }}
+        run: |
+          version="$(sed -n "s/^const VERSION = '\(.*\)';$/\1/p" sw.js)"
+          echo "waiting for $URL to serve cache version $version"
+          for i in $(seq 1 60); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "$URL" || true)"
+            live="$(curl -fsS "${URL}sw.js?nocache=$i" 2>/dev/null | sed -n "s/^const VERSION = '\(.*\)';$/\1/p" || true)"
+            echo "attempt $i: HTTP $code, live version ${live:-none}"
+            if [ "$code" = "200" ] && [ "$live" = "$version" ]; then ok=1; break; fi
+            sleep 10
+          done
+          [ -n "$ok" ] || { echo "$URL never served this deploy"; exit 1; }
+          for f in manifest.json sw.js src/pwa.js icons/icon-192.png icons/icon-512.png icons/icon-maskable-512.png icons/apple-touch-icon.png; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "$URL$f")"
+            echo "$code $f"
+            [ "$code" = "200" ] || exit 1
+          done
+
+      - name: Lighthouse PWA audit of the live site
+        env:
+          URL: ${{ needs.deploy.outputs.page_url }}
+        run: |
+          npm i --no-save --no-package-lock lighthouse@11.7.1
+          CHROME_PATH="$(command -v google-chrome)" npx lighthouse "$URL" \
+            --only-categories=pwa --output=json --output-path=./live.json \
+            --chrome-flags="--headless=new --no-sandbox" --quiet
+          node tools/check-lighthouse.js live.json

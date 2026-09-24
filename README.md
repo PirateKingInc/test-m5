@@ -1,6 +1,7 @@
 # Brackenfall: The Long Hush
 
-**▶ Play it: https://piratekinginc.github.io/test-m5/**
+**▶ Play it: https://piratekinginc.github.io/test-m5/** — or
+[install it](#install-it-and-play-offline) and play offline.
 
 > **The first deploy needs one switch flipped by hand.** GitHub Pages has to be
 > turned on before a workflow can publish to it, and a workflow cannot turn it
@@ -154,6 +155,40 @@ a swing taken from the ground.
 
 ---
 
+## Install it and play offline
+
+Brackenfall is an installable web app. You never *have* to install it — the
+page plays exactly the same in a browser tab — but installed it opens in its
+own window without browser chrome and has its own icon.
+
+**It plays offline either way.** The first visit stores every file the game
+needs on your device, so from then on it loads and plays with no connection
+at all, installed or not.
+
+| | How |
+| --- | --- |
+| **Desktop** (Chrome, Edge) | Click **INSTALL** in the banner at the top of the game, or the install icon at the right of the address bar. |
+| **Android** (Chrome) | Tap **INSTALL** in the banner, or ⋮ → **Install app** / **Add to Home screen**. |
+| **iPhone / iPad** (Safari) | iOS has no install button for web apps, so the banner tells you how instead: tap **Share** (the square with the arrow), then **Add to Home Screen**. |
+
+Dismiss the banner with **✕** and it stays away for two weeks.
+
+**Updates.** When a new version is published, the game shows *A NEW VERSION
+IS READY* with **RELOAD** and **LATER**. Nothing changes under you mid-game:
+the version you are playing keeps running until you choose RELOAD, and then
+**Continue** picks up from your last autosave.
+
+**Your save when you install.**
+
+* **Chrome and Edge on desktop and Android:** the installed app shares the
+  browser's storage for the site, so a game you started in a tab is waiting
+  under **Continue** in the app.
+* **iPhone and iPad:** a Home Screen app gets **its own storage, separate from
+  Safari's**. A save made in Safari does *not* carry over to the Home Screen
+  app. If you want to play installed on iOS, install first and start there.
+
+---
+
 ## Running it
 
 It is a static site with no build step.
@@ -172,11 +207,26 @@ will not work — it is ES modules, which browsers refuse to load over `file://`
 No dependencies to install. Node 20 or newer.
 
 ```sh
-npm test        # 145 unit tests
-npm run verify  # map integrity, progression proof, softlock search
+npm test        # 162 unit tests
+npm run verify  # map integrity, progression proof, softlock search, manifest, icons, service worker
 npm run bot     # the scripted playthrough, New Game to the credits
 npm run ci      # all three, which is what CI runs
 ```
+
+The installable-app layer also has browser tests that drive headless Chrome.
+They need `playwright-core`, which is test tooling rather than a dependency, so
+it is installed without touching `package.json`:
+
+```sh
+npm i --no-save --no-package-lock playwright-core
+xvfb-run -a npm run test:browser   # xvfb for the standalone-window test; CI does the same
+```
+
+They cover the service worker registering and precaching every file, the game
+loading and playing with the server stopped and the browser offline, a deploy
+of a changed file bringing up the update banner, both install banners, and a
+save made in a browser tab being continued in a real standalone app window.
+CI also runs a Lighthouse PWA audit and fails unless the site is installable.
 
 | | |
 | --- | --- |
@@ -185,7 +235,12 @@ npm run ci      # all three, which is what CI runs
 | `npm run verify:softlock` | every ordering of key spends and boss kills, and a per-room pit-trap search. Writes `SOFTLOCK.md` |
 | `npm run bot` | 26820 frames of scripted input from New Game to the credits, then replayed into a fresh game and compared state-for-state |
 
-`SOFTLOCK.md` is generated, and CI fails if it is stale.
+`SOFTLOCK.md` is generated, and CI fails if it is stale. So are two more:
+
+| | |
+| --- | --- |
+| `npm run icons` | draws the app icons from Summer's sprite in the four palette colours. CI fails if `icons/` drifts |
+| `npm run sw` | writes the precache list and a hash of every shipped file into `sw.js`. **Run it after changing any file under `src/`, `index.html`, `manifest.json` or `icons/`**, or CI fails: a changed file with an unchanged worker would never reach anyone who already has the game |
 
 ---
 
@@ -193,6 +248,10 @@ npm run ci      # all three, which is what CI runs
 
 ```
 index.html          the whole shell: canvas, touch pad, one <script type="module">
+manifest.json       the web app manifest: name, colours, icons, standalone display
+sw.js               the service worker: versioned, cache-first precache of every file
+src/pwa.js          registers the worker; the update and install banners
+icons/              app icons, generated from Summer's sprite by tools/make-icons.js
 src/game/           the simulation. No DOM, no clock, no Math.random
 src/engine/         render, input, audio, storage, the fixed-timestep loop
 src/data/           palette, tiles, sprites, the score, and the rooms
@@ -237,7 +296,10 @@ is a save and **New Game** either way.
 
 The valley, the characters, the monsters, the items, the melodies and the name.
 Nothing is drawn from any existing work, and there are no external assets of
-any kind — no images, no audio files, no fonts, no libraries.
+any kind — no images, no audio files, no fonts, no libraries. The app icons
+are the one set of image files in the repository, and they are not an
+exception: `tools/make-icons.js` renders them from Summer's pixel-string
+sprite in the four palette colours.
 
 Ideas that did not fit the two-button rule or the two-dungeon scope are in
 `BACKLOG.md`.
