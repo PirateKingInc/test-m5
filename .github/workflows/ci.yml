@@ -42,7 +42,9 @@ jobs:
       - name: Install browser test tooling
         run: npm i --no-save --no-package-lock playwright-core@1.56.1
 
-      - name: Service worker registers, precaches, and the game plays offline
-        run: npm run test:browser
+      # xvfb: the save-persistence test opens the game as a real standalone
+      # app window, which needs a headed browser.
+      - name: Service worker, offline play, update and install banners, saves in standalone
+        run: xvfb-run -a npm run test:browser
         env:
           CHROME_CHANNEL: chrome

@@ -26,6 +26,7 @@ let reloading = false;
 function offerUpdate(worker) {
   const banner = $('pwa-update');
   if (!banner) return;
+  setBanner($('pwa-install'), false); // one banner at a time; the update matters more
   setBanner(banner, true);
   banner.querySelector('[data-pwa="reload"]').onclick = () => {
     reloading = true;
@@ -70,5 +71,98 @@ export async function registerWorker() {
     return null;
   }
 }
+
+// --------------------------------------------------------------------------
+// Installing. Chromium browsers hand over a deferred native prompt, which the
+// INSTALL button opens. iOS has no prompt at all, so there the banner says how
+// to do it by hand instead of offering a button that cannot work. Anywhere
+// else, nothing is shown - and nothing about playing ever depends on it.
+// --------------------------------------------------------------------------
+
+// Its own key: a dismissal is a preference, and must never touch the save.
+export const DISMISS_KEY = 'brackenfall.pwa.install-dismissed';
+const DISMISS_FOR = 14 * 24 * HOUR;
+
+export function isStandalone() {
+  return window.matchMedia?.('(display-mode: standalone)').matches
+    || window.matchMedia?.('(display-mode: fullscreen)').matches
+    || navigator.standalone === true;
+}
+
+export function isIos() {
+  const ua = navigator.userAgent;
+  // iPadOS reports itself as a Mac; the touch points give it away (no Mac
+  // has a touchscreen).
+  return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 0);
+}
+
+function recentlyDismissed() {
+  try {
+    const at = Number(window.localStorage.getItem(DISMISS_KEY));
+    return at > 0 && Date.now() - at < DISMISS_FOR;
+  } catch {
+    return false;
+  }
+}
+
+function rememberDismissal() {
+  try {
+    window.localStorage.setItem(DISMISS_KEY, String(Date.now()));
+  } catch {
+    // Private mode: it will simply be offered again next time.
+  }
+}
+
+let deferredPrompt = null;
+
+function offerInstall(mode) {
+  const banner = $('pwa-install');
+  if (!banner || isStandalone() || recentlyDismissed()) return;
+  if ($('pwa-update') && !$('pwa-update').hidden) return;
+  const button = banner.querySelector('[data-pwa="install"]');
+  const message = banner.querySelector('[data-pwa="message"]');
+  if (mode === 'ios') {
+    message.textContent = 'INSTALL: TAP SHARE \u2191 THEN "ADD TO HOME SCREEN".';
+    button.hidden = true;
+  } else {
+    button.hidden = false;
+    button.onclick = async () => {
+      const prompt = deferredPrompt;
+      deferredPrompt = null;
+      setBanner(banner, false);
+      if (!prompt) return;
+      prompt.prompt();
+      // A refusal counts as a dismissal; an acceptance ends in appinstalled.
+      const choice = await prompt.userChoice.catch(() => null);
+      if (choice?.outcome !== 'accepted') rememberDismissal();
+    };
+  }
+  banner.querySelector('[data-pwa="dismiss"]').onclick = () => {
+    rememberDismissal();
+    setBanner(banner, false);
+  };
+  setBanner(banner, true);
+}
+
+function askForDurableStorage() {
+  // Installed apps are the case where losing a save would hurt most. Chrome
+  // grants this to installed apps; elsewhere it is a polite request.
+  navigator.storage?.persist?.().catch(() => {});
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  offerInstall('native');
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredPrompt = null;
+  setBanner($('pwa-install'), false);
+  askForDurableStorage();
+});
+
+if (isStandalone()) askForDurableStorage();
+else if (isIos()) offerInstall('ios');
 
 registerWorker();

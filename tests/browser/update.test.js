@@ -19,7 +19,7 @@ function deployChange(dir) {
 }
 
 const servedStorage = (page) => page.evaluate(() => fetch('./src/engine/storage.js').then((r) => r.text()));
-const bannerShown = (page) => page.evaluate(() => !document.getElementById('pwa-update').hidden);
+const bannerShown = (page) => page.evaluate(() => document.getElementById('pwa-update').getClientRects().length > 0);
 
 test('the first visit neither shows the update banner nor reloads', { skip }, async () => {
   const browser = await launch();
